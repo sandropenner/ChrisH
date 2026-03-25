@@ -21,7 +21,7 @@ export function StatusBar() {
   return (
     <footer className="status-bar">
       <span>
-        Page {Math.max(1, state.currentPageIndex + 1)} / {active?.document.workingPageModels.length ?? 0}
+        Page {active ? Math.max(1, state.currentPageIndex + 1) : 0} / {active?.document.workingPageModels.length ?? 0}
       </span>
       <span>{Math.round(state.zoom * 100)}%</span>
       <span>{saveText}</span>

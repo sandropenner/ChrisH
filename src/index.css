@@ -117,7 +117,7 @@ html.dark .tab-chip {
 
 .toolbar {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 8px;
   position: relative;
@@ -125,6 +125,9 @@ html.dark .tab-chip {
   border-bottom: 1px solid rgb(148 163 184 / 0.35);
   background: rgb(255 255 255 / 0.8);
   backdrop-filter: blur(6px);
+  overflow-x: auto;
+  overflow-y: visible;
+  white-space: nowrap;
 }
 
 html.dark .toolbar {
@@ -137,6 +140,7 @@ html.dark .toolbar {
   gap: 6px;
   padding-right: 6px;
   border-right: 1px solid rgb(148 163 184 / 0.25);
+  flex: 0 0 auto;
 }
 
 .tool-group.right {
@@ -155,6 +159,7 @@ html.dark .toolbar {
   color: inherit;
   padding: 6px 9px;
   cursor: pointer;
+  flex: 0 0 auto;
 }
 
 .icon-btn {
@@ -162,6 +167,11 @@ html.dark .toolbar {
 }
 
 .tool-btn.active {
+  border-color: rgb(14 165 233 / 0.7);
+  box-shadow: inset 0 0 0 1px rgb(14 165 233 / 0.2);
+}
+
+.icon-btn.active {
   border-color: rgb(14 165 233 / 0.7);
   box-shadow: inset 0 0 0 1px rgb(14 165 233 / 0.2);
 }
@@ -202,9 +212,7 @@ html.dark .icon-btn {
 }
 
 .thumb-item {
-  position: absolute;
-  left: 0;
-  right: 0;
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -214,24 +222,36 @@ html.dark .icon-btn {
   background: rgb(255 255 255 / 0.85);
   color: inherit;
   padding: 8px;
-  margin: 0 4px;
   cursor: pointer;
+  width: 100%;
+}
+
+.thumb-list {
+  display: grid;
+  gap: 10px;
 }
 
 .thumb-select-dot {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 12px;
-  height: 12px;
+  top: 10px;
+  right: 10px;
+  width: 14px;
+  height: 14px;
   border-radius: 999px;
-  border: 1px solid rgb(148 163 184 / 0.75);
-  background: rgb(255 255 255 / 0.85);
+  border: 1px solid rgb(71 85 105 / 0.9);
+  background: rgb(248 250 252 / 0.95);
+  z-index: 3;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.75);
 }
 
 .thumb-select-dot.selected {
   background: #facc15;
   border-color: #ca8a04;
+}
+
+html.dark .thumb-select-dot {
+  border-color: rgb(148 163 184 / 0.95);
+  background: rgb(15 23 42 / 0.9);
 }
 
 html.dark .thumb-item {
@@ -280,6 +300,10 @@ html.dark .thumb-item {
   pointer-events: auto;
 }
 
+.overlay-layer.crosshair {
+  cursor: crosshair;
+}
+
 .annot {
   position: absolute;
   border-radius: 2px;
@@ -300,6 +324,11 @@ html.dark .thumb-item {
   border-style: dashed;
 }
 
+.annot.text-draft {
+  background: rgb(14 165 233 / 0.2);
+  border: 1px dashed rgb(14 165 233 / 0.9);
+}
+
 .annot.text-overlay {
   pointer-events: auto;
   background: rgb(255 255 255 / 0.86);
@@ -312,6 +341,18 @@ html.dark .thumb-item {
 
 .annot.text-overlay.selected {
   border-color: rgb(14 165 233 / 0.9);
+}
+
+.resize-handle {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgb(14 165 233 / 0.95);
+  border: 1px solid rgb(255 255 255 / 0.95);
+  cursor: nwse-resize;
 }
 
 .annot.search-active {

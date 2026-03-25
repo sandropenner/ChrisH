@@ -206,6 +206,7 @@ type Store = {
   theme: ThemeMode
   selectedAnnotationId: string | null
   selectedTabIds: string[]
+  toolPopover: ToolMode | 'search' | null
   statusMessage: string | null
   leftSidebarCollapsed: boolean
   recentFiles: string[]
@@ -221,6 +222,8 @@ type Store = {
   zoomOut: () => void
   setFitMode: (mode: FitMode) => void
   setTool: (tool: ToolMode) => void
+  setToolPopover: (popover: ToolMode | 'search' | null) => void
+  closeToolPopover: () => void
   setHighlightToolSettings: (patch: Partial<HighlightToolSettings>) => void
   setTextToolSettings: (patch: Partial<TextToolSettings>) => void
   setWhiteoutToolSettings: (patch: Partial<WhiteoutToolSettings>) => void
@@ -233,7 +236,6 @@ type Store = {
   addHighlights: (pageId: string, rects: Array<{ x: number; y: number; width: number; height: number }>) => void
   addTextOverlay: (pageId: string, rect: { x: number; y: number; width: number; height: number }) => void
   addWhiteout: (pageId: string, rect: { x: number; y: number; width: number; height: number }, replacement?: string) => void
-  addStamp: () => void
   updateAnnotation: (pageId: string, annotationId: string, patch: Partial<Annotation>) => void
   removeAnnotation: (pageId: string, annotationId: string) => void
   selectAnnotation: (id: string | null) => void
@@ -290,7 +292,7 @@ function ensureEditable(setter: (value: Partial<Store>) => void, doc: WorkingDoc
 }
 
 export const useEditorStore = create<Store>((set, get) => ({
-  tabs: [tabFromDoc(emptyDocument())],
+  tabs: [],
   activeTabId: null,
   currentPageIndex: 0,
   zoom: 1,
@@ -305,6 +307,7 @@ export const useEditorStore = create<Store>((set, get) => ({
   theme: 'light',
   selectedAnnotationId: null,
   selectedTabIds: [],
+  toolPopover: null,
   statusMessage: null,
   leftSidebarCollapsed: false,
   recentFiles: [],
@@ -350,6 +353,8 @@ export const useEditorStore = create<Store>((set, get) => ({
           tabs: [...s.tabs, tabFromDoc(doc)],
           activeTabId: doc.id,
           currentPageIndex: 0,
+          tool: 'select',
+          toolPopover: null,
           selectedAnnotationId: null,
           selectedTabIds: [],
           zoom: 1,
@@ -364,6 +369,8 @@ export const useEditorStore = create<Store>((set, get) => ({
           return {
             tabs,
             currentPageIndex: 0,
+            tool: 'select',
+            toolPopover: null,
             selectedAnnotationId: null,
             selectedTabIds: [],
             zoom: 1,
@@ -470,7 +477,9 @@ export const useEditorStore = create<Store>((set, get) => ({
   zoomIn: () => set((state) => ({ zoom: Math.min(4, Number((state.zoom + 0.1).toFixed(2))), fitMode: 'custom' })),
   zoomOut: () => set((state) => ({ zoom: Math.max(0.25, Number((state.zoom - 0.1).toFixed(2))), fitMode: 'custom' })),
   setFitMode: (mode) => set({ fitMode: mode }),
-  setTool: (tool) => set({ tool }),
+  setTool: (tool) => set({ tool, toolPopover: tool === 'select' ? null : get().toolPopover }),
+  setToolPopover: (popover) => set({ toolPopover: popover }),
+  closeToolPopover: () => set({ toolPopover: null }),
   setHighlightToolSettings: (patch) =>
     set((state) => ({
       toolSettings: {
@@ -574,7 +583,7 @@ export const useEditorStore = create<Store>((set, get) => ({
     nextDoc = commit(nextDoc, 'Add highlight', before, buildSnapshot(nextDoc, state.currentPageIndex))
     const tabs = [...state.tabs]
     tabs[idx] = { ...tabs[idx], document: nextDoc }
-    set({ tabs, statusMessage: 'Highlight added' })
+    set({ tabs, toolPopover: null, statusMessage: 'Highlight added' })
   },
 
   addTextOverlay: (pageId, rect) => {
@@ -604,7 +613,7 @@ export const useEditorStore = create<Store>((set, get) => ({
     nextDoc = commit(nextDoc, 'Add text overlay', before, buildSnapshot(nextDoc, state.currentPageIndex))
     const tabs = [...state.tabs]
     tabs[idx] = { ...tabs[idx], document: nextDoc }
-    set({ tabs, selectedAnnotationId: entry.id, statusMessage: 'Text overlay added' })
+    set({ tabs, toolPopover: null, selectedAnnotationId: entry.id, statusMessage: 'Text overlay added' })
   },
 
   addWhiteout: (pageId, rect, replacement) => {
@@ -647,38 +656,7 @@ export const useEditorStore = create<Store>((set, get) => ({
     nextDoc = commit(nextDoc, 'Add whiteout', before, buildSnapshot(nextDoc, state.currentPageIndex))
     const tabs = [...state.tabs]
     tabs[idx] = { ...tabs[idx], document: nextDoc }
-    set({ tabs, statusMessage: 'Whiteout added (Cover & Replace)' })
-  },
-
-  addStamp: () => {
-    const state = get()
-    const idx = activeIndex(state.tabs, state.activeTabId)
-    if (idx === -1) return
-    const doc = state.tabs[idx].document
-    if (!ensureEditable(set, doc)) return
-    const page = doc.workingPageModels[state.currentPageIndex]
-    if (!page) return
-    const before = buildSnapshot(doc, state.currentPageIndex)
-    const ann = cloneAnnots(doc.annotationsByPage)
-    const now = Date.now()
-    const stamp: Annotation = {
-      id: crypto.randomUUID(),
-      pageId: page.pageId,
-      type: 'textOverlay',
-      rect: { x: 0.62, y: 0.08, width: 0.28, height: 0.08 },
-      text: 'APPROVED',
-      color: '#0f766e',
-      fontSize: 22,
-      bold: true,
-      createdAt: now,
-      updatedAt: now,
-    }
-    ann[page.pageId] = [...(ann[page.pageId] ?? []), stamp]
-    let nextDoc: WorkingDocument = { ...doc, annotationsByPage: ann }
-    nextDoc = commit(nextDoc, 'Add stamp', before, buildSnapshot(nextDoc, state.currentPageIndex))
-    const tabs = [...state.tabs]
-    tabs[idx] = { ...tabs[idx], document: nextDoc }
-    set({ tabs, selectedAnnotationId: stamp.id, statusMessage: 'Stamp added' })
+    set({ tabs, toolPopover: null, statusMessage: 'Whiteout added (Cover & Replace)' })
   },
 
   updateAnnotation: (pageId, annotationId, patch) => {
@@ -905,6 +883,9 @@ export const useEditorStore = create<Store>((set, get) => ({
         tabs: [...current.tabs, tabFromDoc(doc)],
         activeTabId: doc.id,
         currentPageIndex: 0,
+        tool: 'select',
+        toolPopover: null,
+        selectedAnnotationId: null,
         selectedTabIds: [],
         zoom: 1,
         fitMode: 'custom',
@@ -1057,6 +1038,8 @@ export const useEditorStore = create<Store>((set, get) => ({
       tabs: [...s.tabs, tabFromDoc(doc)],
       activeTabId: doc.id,
       currentPageIndex: 0,
+      tool: 'select',
+      toolPopover: null,
       selectedAnnotationId: null,
       statusMessage: 'Created new tab',
     }))
@@ -1085,11 +1068,12 @@ export const useEditorStore = create<Store>((set, get) => ({
     }
     const tabs = state.tabs.filter((tab) => tab.id !== id)
     if (!tabs.length) {
-      const doc = emptyDocument()
       set({
-        tabs: [tabFromDoc(doc)],
-        activeTabId: doc.id,
+        tabs: [],
+        activeTabId: null,
         currentPageIndex: 0,
+        tool: 'select',
+        toolPopover: null,
         selectedAnnotationId: null,
         selectedTabIds: [],
       })

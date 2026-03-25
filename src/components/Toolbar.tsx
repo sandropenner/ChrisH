@@ -1,6 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ChevronDown,
   Circle,
   Eraser,
   FileDown,
@@ -17,7 +16,6 @@ import {
   RotateCw,
   Save,
   Search,
-  Stamp,
   Sun,
   Type,
   Undo2,
@@ -27,17 +25,17 @@ import {
 
 import { getActiveTab } from '../store/selectors'
 import { useEditorStore } from '../store/useEditorStore'
-
-type ToolbarMenu = 'search' | 'highlight' | 'text' | 'whiteout' | null
+import type { ToolMode } from '../types/models'
 
 const HIGHLIGHT_PRESETS = ['#FFE066', '#FDE047', '#86EFAC', '#93C5FD', '#FCA5A5']
+const TOOL_POPOVERS: ToolMode[] = ['highlight', 'text', 'whiteout']
 
 export function Toolbar() {
   const state = useEditorStore((s) => s)
   const active = getActiveTab(state)
   const editingLocked = active?.document.editingLocked ?? false
-  const [menu, setMenu] = useState<ToolbarMenu>(null)
   const [searchInput, setSearchInput] = useState('')
+  const popoverRef = useRef<HTMLDivElement | null>(null)
 
   const selectedPageCount = useMemo(
     () => active?.document.workingPageModels.filter((page) => page.selected).length ?? 0,
@@ -47,12 +45,49 @@ export function Toolbar() {
   const activeMatch = active?.document.searchState.activeMatchIndex ?? -1
   const canSave = Boolean(active?.document.workingPdfBytes) && !editingLocked
 
-  const toggleMenu = (next: ToolbarMenu) => {
-    setMenu((current) => (current === next ? null : next))
-  }
+  useEffect(() => {
+    if (!state.toolPopover) return
+
+    const onMouseDown = (event: MouseEvent) => {
+      const target = event.target as Node
+      if (popoverRef.current?.contains(target)) return
+      const shouldResetTool = TOOL_POPOVERS.includes(state.toolPopover as ToolMode) && state.tool !== 'select'
+      if (shouldResetTool) {
+        state.setTool('select')
+      }
+      state.closeToolPopover()
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      const shouldResetTool = TOOL_POPOVERS.includes(state.toolPopover as ToolMode) && state.tool !== 'select'
+      if (shouldResetTool) {
+        state.setTool('select')
+      }
+      state.closeToolPopover()
+    }
+
+    document.addEventListener('mousedown', onMouseDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [state])
 
   const runSearch = () => {
     void state.runSearch(searchInput)
+  }
+
+  const toggleTool = (tool: ToolMode) => {
+    if (editingLocked) return
+    if (state.tool === tool) {
+      state.setTool('select')
+      state.closeToolPopover()
+      return
+    }
+    state.setTool(tool)
+    state.setToolPopover(tool)
   }
 
   return (
@@ -81,58 +116,26 @@ export function Toolbar() {
         <button
           type="button"
           className={`tool-btn ${state.tool === 'highlight' ? 'active' : ''}`}
-          onClick={() => state.setTool('highlight')}
+          onClick={() => toggleTool('highlight')}
           disabled={editingLocked}
         >
           <Highlighter size={16} /> Highlight
         </button>
         <button
           type="button"
-          className="icon-btn"
-          title="Highlight options"
-          onClick={() => toggleMenu('highlight')}
-          disabled={editingLocked}
-        >
-          <ChevronDown size={14} />
-        </button>
-
-        <button
-          type="button"
           className={`tool-btn ${state.tool === 'text' ? 'active' : ''}`}
-          onClick={() => state.setTool('text')}
+          onClick={() => toggleTool('text')}
           disabled={editingLocked}
         >
           <Type size={16} /> Add Text
         </button>
         <button
           type="button"
-          className="icon-btn"
-          title="Text tool options"
-          onClick={() => toggleMenu('text')}
-          disabled={editingLocked}
-        >
-          <ChevronDown size={14} />
-        </button>
-
-        <button
-          type="button"
           className={`tool-btn ${state.tool === 'whiteout' ? 'active' : ''}`}
-          onClick={() => state.setTool('whiteout')}
+          onClick={() => toggleTool('whiteout')}
           disabled={editingLocked}
         >
           <Eraser size={16} /> Whiteout / Cover & Replace
-        </button>
-        <button
-          type="button"
-          className="icon-btn"
-          title="Whiteout options"
-          onClick={() => toggleMenu('whiteout')}
-          disabled={editingLocked}
-        >
-          <ChevronDown size={14} />
-        </button>
-        <button type="button" className="tool-btn" onClick={() => state.addStamp()} disabled={editingLocked}>
-          <Stamp size={16} /> Stamp
         </button>
       </div>
 
@@ -182,7 +185,14 @@ export function Toolbar() {
       </div>
 
       <div className="tool-group right">
-        <button type="button" className="icon-btn" title="Search" onClick={() => toggleMenu('search')}>
+        <button
+          type="button"
+          className={`icon-btn ${state.toolPopover === 'search' ? 'active' : ''}`}
+          title="Search"
+          onClick={() =>
+            state.setToolPopover(state.toolPopover === 'search' ? null : 'search')
+          }
+        >
           <Search size={16} />
         </button>
         <button type="button" className="icon-btn" title="Undo" onClick={() => state.undo()}>
@@ -214,9 +224,9 @@ export function Toolbar() {
         </button>
       </div>
 
-      {menu ? (
-        <div className="toolbar-popover panel">
-          {menu === 'search' ? (
+      {state.toolPopover ? (
+        <div className="toolbar-popover panel" ref={popoverRef}>
+          {state.toolPopover === 'search' ? (
             <div className="stack">
               <h3>Search</h3>
               <input
@@ -264,7 +274,7 @@ export function Toolbar() {
             </div>
           ) : null}
 
-          {menu === 'highlight' ? (
+          {state.toolPopover === 'highlight' ? (
             <div className="stack">
               <h3>Highlight Options</h3>
               <div className="row">
@@ -313,9 +323,9 @@ export function Toolbar() {
             </div>
           ) : null}
 
-          {menu === 'text' ? (
+          {state.toolPopover === 'text' ? (
             <div className="stack">
-              <h3>Text Tool Options</h3>
+              <h3>Add Text Options</h3>
               <label>
                 Default Text
                 <input
@@ -353,7 +363,7 @@ export function Toolbar() {
             </div>
           ) : null}
 
-          {menu === 'whiteout' ? (
+          {state.toolPopover === 'whiteout' ? (
             <div className="stack">
               <h3>Whiteout / Replace Options</h3>
               <label>
@@ -403,10 +413,6 @@ export function Toolbar() {
                   }
                 />
               </label>
-              <p className="muted">
-                Whiteout/Cover & Replace overlays content visually and does not guarantee true source-text
-                removal.
-              </p>
             </div>
           ) : null}
         </div>
