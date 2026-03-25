@@ -7,7 +7,6 @@ import './lib/pdf/worker'
 import { DocumentViewer } from './components/DocumentViewer'
 import { InspectorPanel } from './components/InspectorPanel'
 import { OrganizerView } from './components/OrganizerView'
-import { RecoveryBanner } from './components/RecoveryBanner'
 import { SearchPanel } from './components/SearchPanel'
 import { StatusBar } from './components/StatusBar'
 import { TabsBar } from './components/TabsBar'
@@ -96,7 +95,6 @@ function App() {
 
   return (
     <div className="app-shell">
-      <RecoveryBanner />
       <TabsBar />
       <Toolbar />
 

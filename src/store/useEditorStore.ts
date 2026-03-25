@@ -3,7 +3,6 @@ import { PDFDocument } from 'pdf-lib'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 
 import { buildSnapshot, cloneSnapshot, createHistoryCommand } from '../lib/commands/history'
-import { base64ToBytes, bytesToBase64 } from '../lib/pdf/encoding'
 import {
   createInitialPageModels,
   exportSelectedPages as exportPages,
@@ -26,14 +25,12 @@ import type {
   EditorSnapshot,
   FitMode,
   PageModel,
-  SessionRecoveryPayload,
   ThemeMode,
   ToolMode,
   WorkingDocument,
 } from '../types/models'
 
 const THEME_KEY = 'chris-pdf-theme'
-const RECOVERY_KEY = 'chris-pdf-recovery-v1'
 
 function emptyDocument(title = 'Untitled.pdf'): WorkingDocument {
   return {
@@ -162,8 +159,6 @@ type Store = {
   statusMessage: string | null
   rightPanelOpen: boolean
   recentFiles: string[]
-  recoveryAvailable: boolean
-  recoveryPayload: SessionRecoveryPayload | null
 
   setStatusMessage: (message: string | null) => void
   initialize: () => Promise<void>
@@ -204,35 +199,9 @@ type Store = {
   newTab: () => void
   switchTab: (id: string) => void
   closeTab: (id: string) => void
-  restoreRecoverySession: () => Promise<void>
-  dismissRecovery: () => void
 }
 
 export type EditorStore = Store
-
-function persistRecoveryState(state: Store): void {
-  const payload: SessionRecoveryPayload = {
-    tabs: state.tabs.map((tab) => ({
-      id: tab.id,
-      title: tab.title,
-      active: tab.id === state.activeTabId,
-      sourcePath: tab.document.sourcePath,
-      sourceFileName: tab.document.sourceFileName,
-      workingPdfBase64: tab.document.workingPdfBytes ? bytesToBase64(tab.document.workingPdfBytes) : null,
-      sourcePdfBase64: tab.document.sourceBytes ? bytesToBase64(tab.document.sourceBytes) : null,
-      pageModels: tab.document.workingPageModels,
-      annotationsByPage: tab.document.annotationsByPage,
-      dirty: tab.document.dirty,
-      currentPageIndex: state.currentPageIndex,
-    })),
-    timestamp: Date.now(),
-  }
-  if (!state.tabs.some((tab) => tab.document.dirty)) {
-    localStorage.removeItem(RECOVERY_KEY)
-    return
-  }
-  localStorage.setItem(RECOVERY_KEY, JSON.stringify(payload))
-}
 
 function commit(
   doc: WorkingDocument,
@@ -276,8 +245,6 @@ export const useEditorStore = create<Store>((set, get) => ({
   statusMessage: null,
   rightPanelOpen: true,
   recentFiles: [],
-  recoveryAvailable: false,
-  recoveryPayload: null,
 
   setStatusMessage: (message) => set({ statusMessage: message }),
 
@@ -297,14 +264,6 @@ export const useEditorStore = create<Store>((set, get) => ({
       set({ recentFiles: await listRecentFiles() })
     } catch {
       set({ recentFiles: [] })
-    }
-    const recovery = localStorage.getItem(RECOVERY_KEY)
-    if (recovery) {
-      try {
-        set({ recoveryAvailable: true, recoveryPayload: JSON.parse(recovery) as SessionRecoveryPayload })
-      } catch {
-        localStorage.removeItem(RECOVERY_KEY)
-      }
     }
   },
 
@@ -364,14 +323,11 @@ export const useEditorStore = create<Store>((set, get) => ({
                 statusMessage: support.editingLocked ? support.reason : current.statusMessage,
               }
             })
-            persistRecoveryState(get())
           })
           .catch((error) => {
             console.error('[openRecent:editing-support-check]', error)
           })
       }
-
-      persistRecoveryState(get())
     } catch (error) {
       const message = errorText(error).toLowerCase()
       if (message.includes('encrypted') || message.includes('password')) {
@@ -504,7 +460,6 @@ export const useEditorStore = create<Store>((set, get) => ({
     const tabs = [...state.tabs]
     tabs[idx] = { ...tabs[idx], document: nextDoc }
     set({ tabs, statusMessage: 'Highlight added' })
-    persistRecoveryState(get())
   },
 
   addTextOverlay: (pageId, rect) => {
@@ -523,7 +478,6 @@ export const useEditorStore = create<Store>((set, get) => ({
     const tabs = [...state.tabs]
     tabs[idx] = { ...tabs[idx], document: nextDoc }
     set({ tabs, selectedAnnotationId: entry.id, statusMessage: 'Text overlay added' })
-    persistRecoveryState(get())
   },
 
   addWhiteout: (pageId, rect, replacement) => {
@@ -546,7 +500,6 @@ export const useEditorStore = create<Store>((set, get) => ({
     const tabs = [...state.tabs]
     tabs[idx] = { ...tabs[idx], document: nextDoc }
     set({ tabs, statusMessage: 'Whiteout added (Cover & Replace)' })
-    persistRecoveryState(get())
   },
 
   addStamp: () => {
@@ -578,7 +531,6 @@ export const useEditorStore = create<Store>((set, get) => ({
     const tabs = [...state.tabs]
     tabs[idx] = { ...tabs[idx], document: nextDoc }
     set({ tabs, selectedAnnotationId: stamp.id, statusMessage: 'Stamp added' })
-    persistRecoveryState(get())
   },
 
   updateAnnotation: (pageId, annotationId, patch) => {
@@ -596,7 +548,6 @@ export const useEditorStore = create<Store>((set, get) => ({
     const tabs = [...state.tabs]
     tabs[idx] = { ...tabs[idx], document: nextDoc }
     set({ tabs })
-    persistRecoveryState(get())
   },
 
   removeAnnotation: (pageId, annotationId) => {
@@ -614,7 +565,6 @@ export const useEditorStore = create<Store>((set, get) => ({
     const tabs = [...state.tabs]
     tabs[idx] = { ...tabs[idx], document: nextDoc }
     set({ tabs, selectedAnnotationId: null })
-    persistRecoveryState(get())
   },
 
   selectAnnotation: (id) => set({ selectedAnnotationId: id }),
@@ -664,7 +614,6 @@ export const useEditorStore = create<Store>((set, get) => ({
       const tabs = [...state.tabs]
       tabs[idx] = { ...tabs[idx], document: nextDoc }
       set({ tabs, statusMessage: 'Pages reordered' })
-      persistRecoveryState(get())
     } catch (e) {
       set({ statusMessage: e instanceof Error ? e.message : String(e) })
     }
@@ -689,7 +638,6 @@ export const useEditorStore = create<Store>((set, get) => ({
       const tabs = [...state.tabs]
       tabs[idx] = { ...tabs[idx], document: nextDoc }
       set({ tabs, statusMessage: 'Page rotation updated' })
-      persistRecoveryState(get())
     } catch (e) {
       set({ statusMessage: e instanceof Error ? e.message : String(e) })
     }
@@ -719,7 +667,6 @@ export const useEditorStore = create<Store>((set, get) => ({
       const tabs = [...state.tabs]
       tabs[idx] = { ...tabs[idx], document: nextDoc }
       set({ tabs, currentPageIndex: Math.min(state.currentPageIndex, Math.max(0, model.length - 1)), statusMessage: 'Selected pages removed' })
-      persistRecoveryState(get())
     } catch (e) {
       set({ statusMessage: e instanceof Error ? e.message : String(e) })
     }
@@ -745,7 +692,6 @@ export const useEditorStore = create<Store>((set, get) => ({
       const tabs = [...state.tabs]
       tabs[idx] = { ...tabs[idx], document: nextDoc }
       set({ tabs, currentPageIndex: at, statusMessage: 'Blank page inserted' })
-      persistRecoveryState(get())
     } catch (e) {
       set({ statusMessage: e instanceof Error ? e.message : String(e) })
     }
@@ -774,7 +720,6 @@ export const useEditorStore = create<Store>((set, get) => ({
       const tabs = [...state.tabs]
       tabs[idx] = { ...tabs[idx], document: nextDoc }
       set({ tabs, statusMessage: `Merged ${merged.insertedPageCount} pages` })
-      persistRecoveryState(get())
     } catch (e) {
       set({ statusMessage: e instanceof Error ? e.message : String(e) })
     }
@@ -822,11 +767,27 @@ export const useEditorStore = create<Store>((set, get) => ({
         tabs[i] = {
           ...tabs[i],
           title: fileName(out!),
-          document: { ...tabs[i].document, sourcePath: out!, sourceFileName: fileName(out!), sourceBytes: new Uint8Array(flattened), workingPdfBytes: new Uint8Array(flattened), loadedPdfProxy: null, dirty: false, saveStatus: 'saved', saveError: null, history: { undoStack: [], redoStack: [] } },
+          document: {
+            ...tabs[i].document,
+            sourcePath: out!,
+            sourceFileName: fileName(out!),
+            sourceBytes: new Uint8Array(flattened),
+            workingPdfBytes: new Uint8Array(flattened),
+            loadedPdfProxy: null,
+            annotationsByPage: {},
+            dirty: false,
+            saveStatus: 'saved',
+            saveError: null,
+            history: { undoStack: [], redoStack: [] },
+          },
         }
-        return { tabs, recentFiles: recent, statusMessage: `Saved ${fileName(out!)}` }
+        return {
+          tabs,
+          recentFiles: recent,
+          selectedAnnotationId: null,
+          statusMessage: `Saved ${fileName(out!)}`,
+        }
       })
-      persistRecoveryState(get())
     } catch (e) {
       set({ statusMessage: logAndMessage('save', e, 'Save failed') })
     }
@@ -860,7 +821,6 @@ export const useEditorStore = create<Store>((set, get) => ({
     const tabs = [...state.tabs]
     tabs[idx] = { ...tabs[idx], document: { ...nextDoc, history: { undoStack: doc.history.undoStack.slice(0, -1), redoStack: [...doc.history.redoStack, cmd] } } }
     set({ tabs, currentPageIndex: cmd.before.currentPageIndex, statusMessage: `Undo: ${cmd.label}` })
-    persistRecoveryState(get())
   },
 
   redo: () => {
@@ -874,7 +834,6 @@ export const useEditorStore = create<Store>((set, get) => ({
     const tabs = [...state.tabs]
     tabs[idx] = { ...tabs[idx], document: { ...nextDoc, history: { undoStack: [...doc.history.undoStack, cmd], redoStack: doc.history.redoStack.slice(0, -1) } } }
     set({ tabs, currentPageIndex: cmd.after.currentPageIndex, statusMessage: `Redo: ${cmd.label}` })
-    persistRecoveryState(get())
   },
 
   newTab: () => { const doc = emptyDocument(); set((s) => ({ tabs: [...s.tabs, tabFromDoc(doc)], activeTabId: doc.id, currentPageIndex: 0, statusMessage: 'Created new tab' })) },
@@ -892,31 +851,5 @@ export const useEditorStore = create<Store>((set, get) => ({
     }
     set({ tabs, activeTabId: state.activeTabId === id ? tabs[0].id : state.activeTabId })
   },
-
-  restoreRecoverySession: async () => {
-    const payload = get().recoveryPayload
-    if (!payload) return
-    const tabs: DocumentTab[] = payload.tabs
-      .map((entry) => ({
-        id: entry.id,
-        title: entry.title,
-        document: {
-          ...emptyDocument(entry.sourceFileName),
-          id: entry.id,
-          sourcePath: entry.sourcePath,
-          sourceFileName: entry.sourceFileName,
-          sourceBytes: entry.sourcePdfBase64 ? base64ToBytes(entry.sourcePdfBase64) : null,
-          workingPdfBytes: entry.workingPdfBase64 ? base64ToBytes(entry.workingPdfBase64) : null,
-          workingPageModels: normalizePages(clonePages(entry.pageModels)),
-          annotationsByPage: cloneAnnots(entry.annotationsByPage),
-          dirty: entry.dirty,
-        },
-      }))
-      .filter((tab) => tab.document.workingPdfBytes)
-    if (!tabs.length) return
-    const active = payload.tabs.find((entry) => entry.active)
-    set({ tabs, activeTabId: active?.id ?? tabs[0].id, currentPageIndex: active?.currentPageIndex ?? 0, recoveryAvailable: false, recoveryPayload: null, statusMessage: 'Recovered unsaved session' })
-  },
-
-  dismissRecovery: () => { localStorage.removeItem(RECOVERY_KEY); set({ recoveryAvailable: false, recoveryPayload: null }) },
 }))
+

@@ -125,20 +125,3 @@ export interface DocumentTab {
 export type FitMode = 'custom' | 'width' | 'page'
 
 export type ThemeMode = 'light' | 'dark'
-
-export interface SessionRecoveryPayload {
-  tabs: Array<{
-    id: string
-    title: string
-    active: boolean
-    sourcePath: string | null
-    sourceFileName: string
-    workingPdfBase64: string | null
-    sourcePdfBase64: string | null
-    pageModels: PageModel[]
-    annotationsByPage: Record<string, Annotation[]>
-    dirty: boolean
-    currentPageIndex: number
-  }>
-  timestamp: number
-}

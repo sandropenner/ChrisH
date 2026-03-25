@@ -10,7 +10,7 @@ It is a local/offline-first alternative for common Acrobat-style workflows:
 - Save and Save As using a safe write pipeline (temp file + replace + backup)
 - Undo/redo command history
 - Dark mode and keyboard shortcuts
-- Nice-to-have features included: autosave recovery, recent files, multi-tab support, annotation sidebar, basic stamp tool, improved page/page-status display
+- Nice-to-have features included: recent files, multi-tab support, annotation sidebar, basic stamp tool, improved page/page-status display
 
 ## Stack and why
 
@@ -98,6 +98,7 @@ Implemented commands:
 - Edit/save/export/merge/page-output operations use pdf-lib.
 - If PDF.js can render a file but pdf-lib cannot open it (for example encryption/password restrictions), the app keeps the file open in **view-only** mode and disables editing/saving actions.
 - The status bar and toolbar show a clear view-only message instead of a generic open failure.
+- On successful save/save-as, overlay annotations are flattened into the output PDF and then cleared from editable overlay state to avoid duplicate re-application on later saves.
 
 ## Keyboard shortcuts
 
@@ -119,7 +120,7 @@ Implemented commands:
 - [x] **Phase 4** organizer grid + drag reorder + multi-select + rotate/delete/insert/export
 - [x] **Phase 5** merge/import + pdf-lib compose + save/save-as safe pipeline
 - [x] **Phase 6** undo/redo + unsaved prompts + error handling + docs polish
-- [x] **Phase 7** autosave recovery + recent files + multi-tab + annotation list/sidebar + basic stamp + page label/status improvements
+- [x] **Phase 7** recent files + multi-tab + annotation list/sidebar + basic stamp + page label/status improvements
 
 ## Test status
 
@@ -145,7 +146,6 @@ Potential next improvements:
 - Native PDF annotation object output where stable
 - More advanced text box editing (resize handles, alignment, font families)
 - Faster lazy-loading/rendering for very large documents
-- Optional encrypted local recovery store
 - Better chunk splitting for smaller JS bundle size
 
 ## Notes on delete-text behavior
