@@ -3,12 +3,14 @@ import { Document, Page } from 'react-pdf'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 
+import { usePdfObjectUrl } from '../lib/pdf/usePdfObjectUrl'
 import { getActiveTab } from '../store/selectors'
 import { useEditorStore } from '../store/useEditorStore'
 
 export function ThumbnailSidebar() {
   const state = useEditorStore((s) => s)
   const active = getActiveTab(state)
+  const pdfObjectUrl = usePdfObjectUrl(active?.document.workingPdfBytes ?? null)
   const containerRef = useRef<HTMLDivElement | null>(null)
 
   const pageCount = active?.document.workingPageModels.length ?? 0
@@ -23,10 +25,14 @@ export function ThumbnailSidebar() {
     return <aside className="thumb-sidebar empty">Open a PDF to begin.</aside>
   }
 
+  if (!pdfObjectUrl) {
+    return <aside className="thumb-sidebar empty">Loading thumbnails...</aside>
+  }
+
   return (
     <aside className="thumb-sidebar" ref={containerRef}>
       <Document
-        file={{ data: active.document.workingPdfBytes }}
+        file={pdfObjectUrl}
         loading={<div className="muted">Loading thumbnails...</div>}
         onLoadSuccess={(proxy) => state.setLoadedPdfProxy(proxy as unknown as PDFDocumentProxy)}
         onLoadError={(error) => {

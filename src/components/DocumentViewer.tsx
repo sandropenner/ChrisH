@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Document, Page } from 'react-pdf'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 
+import { usePdfObjectUrl } from '../lib/pdf/usePdfObjectUrl'
 import { getActiveTab } from '../store/selectors'
 import { useEditorStore } from '../store/useEditorStore'
 import type { Annotation } from '../types/models'
@@ -15,6 +16,7 @@ function clamp(value: number): number {
 export function DocumentViewer() {
   const state = useEditorStore((s) => s)
   const active = getActiveTab(state)
+  const pdfObjectUrl = usePdfObjectUrl(active?.document.workingPdfBytes ?? null)
   const pageShellRef = useRef<HTMLDivElement | null>(null)
   const viewerRef = useRef<HTMLDivElement | null>(null)
 
@@ -184,12 +186,20 @@ export function DocumentViewer() {
     )
   }
 
+  if (!pdfObjectUrl) {
+    return (
+      <section className="viewer empty" ref={viewerRef}>
+        <p className="muted">Loading PDF...</p>
+      </section>
+    )
+  }
+
   const safePageNumber = currentPageModel ? state.currentPageIndex + 1 : 1
 
   return (
     <section className="viewer" ref={viewerRef}>
       <Document
-        file={{ data: active.document.workingPdfBytes }}
+        file={pdfObjectUrl}
         loading={<p className="muted">Loading PDF...</p>}
         onLoadSuccess={(proxy) => {
           state.setLoadedPdfProxy(proxy as unknown as PDFDocumentProxy)
