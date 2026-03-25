@@ -75,6 +75,20 @@ html.dark .tabs-bar {
   cursor: pointer;
 }
 
+.tab-select-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 1px solid rgb(148 163 184 / 0.7);
+  background: rgb(255 255 255 / 0.85);
+  flex: 0 0 auto;
+}
+
+.tab-select-dot.selected {
+  background: #facc15;
+  border-color: #ca8a04;
+}
+
 html.dark .tab-chip {
   background: rgb(15 23 42 / 0.85);
 }
@@ -106,6 +120,7 @@ html.dark .tab-chip {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  position: relative;
   padding: 8px 10px;
   border-bottom: 1px solid rgb(148 163 184 / 0.35);
   background: rgb(255 255 255 / 0.8);
@@ -167,8 +182,12 @@ html.dark .icon-btn {
 
 .main-layout {
   display: grid;
-  grid-template-columns: 170px 1fr 340px;
+  grid-template-columns: 170px 1fr;
   min-height: 0;
+}
+
+.main-layout.sidebar-collapsed {
+  grid-template-columns: 1fr;
 }
 
 .thumb-sidebar {
@@ -197,6 +216,22 @@ html.dark .icon-btn {
   padding: 8px;
   margin: 0 4px;
   cursor: pointer;
+}
+
+.thumb-select-dot {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  border: 1px solid rgb(148 163 184 / 0.75);
+  background: rgb(255 255 255 / 0.85);
+}
+
+.thumb-select-dot.selected {
+  background: #facc15;
+  border-color: #ca8a04;
 }
 
 html.dark .thumb-item {
@@ -238,6 +273,11 @@ html.dark .thumb-item {
 .overlay-layer {
   position: absolute;
   inset: 0;
+  pointer-events: none;
+}
+
+.overlay-layer.capture {
+  pointer-events: auto;
 }
 
 .annot {
@@ -262,7 +302,7 @@ html.dark .thumb-item {
 
 .annot.text-overlay {
   pointer-events: auto;
-  background: rgb(255 255 255 / 0.75);
+  background: rgb(255 255 255 / 0.86);
   border: 1px dashed rgb(148 163 184 / 0.6);
   border-radius: 4px;
   padding: 2px 4px;
@@ -286,6 +326,23 @@ html.dark .thumb-item {
   border-left: 1px solid rgb(148 163 184 / 0.35);
   padding: 8px;
   min-height: 0;
+}
+
+.toolbar-popover {
+  position: absolute;
+  right: 10px;
+  top: calc(100% + 8px);
+  width: min(420px, 90vw);
+  z-index: 25;
+  box-shadow: 0 16px 38px rgb(15 23 42 / 0.22);
+}
+
+.color-chip {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 1px solid rgb(148 163 184 / 0.6);
+  cursor: pointer;
 }
 
 .panel {
@@ -424,15 +481,5 @@ html.dark .status-bar {
 @media (max-width: 1200px) {
   .main-layout {
     grid-template-columns: 150px 1fr;
-  }
-
-  .right-pane {
-    position: fixed;
-    right: 12px;
-    top: 122px;
-    bottom: 48px;
-    width: min(360px, 90vw);
-    z-index: 30;
-    background: transparent;
   }
 }

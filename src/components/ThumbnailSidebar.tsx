@@ -44,6 +44,9 @@ export function ThumbnailSidebar() {
           {virtualizer.getVirtualItems().map((item) => {
             const pageIndex = item.index
             const pageModel = active.document.workingPageModels[pageIndex]
+            if (!pageModel) {
+              return null
+            }
             return (
               <button
                 key={pageModel.pageId}
@@ -51,10 +54,30 @@ export function ThumbnailSidebar() {
                 className={`thumb-item ${state.currentPageIndex === pageIndex ? 'active' : ''} ${pageModel.selected ? 'selected' : ''}`}
                 style={{ transform: `translateY(${item.start}px)` }}
                 onClick={(event) => {
+                  if (event.ctrlKey || event.metaKey) {
+                    state.selectPage(pageModel.pageId, true)
+                    return
+                  }
                   state.setCurrentPageIndex(pageIndex)
-                  state.selectPage(pageModel.pageId, event.ctrlKey || event.metaKey)
                 }}
               >
+                <span
+                  className={`thumb-select-dot ${pageModel.selected ? 'selected' : ''}`}
+                  title="Toggle page selection"
+                  role="button"
+                  tabIndex={0}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    state.selectPage(pageModel.pageId, true)
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      state.selectPage(pageModel.pageId, true)
+                    }
+                  }}
+                />
                 <Page pageNumber={pageIndex + 1} width={110} renderTextLayer={false} renderAnnotationLayer={false} />
                 <span className="thumb-label">{pageIndex + 1}</span>
               </button>

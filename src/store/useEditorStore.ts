@@ -7,12 +7,15 @@ import {
   createInitialPageModels,
   exportSelectedPages as exportPages,
   flattenAnnotations,
+  mergePdfDocumentsInOrder,
   mergePdfIntoWorking,
   rebuildPdfFromPageModels,
 } from '../lib/pdf/pageOps'
 import { searchPdf } from '../lib/pdf/search'
 import {
+  createTempPdfPath,
   listRecentFiles,
+  openPathInDefaultApp,
   pickOpenPdf,
   pickSavePdf,
   readPdfBytes,
@@ -24,13 +27,58 @@ import type {
   DocumentTab,
   EditorSnapshot,
   FitMode,
+  HighlightToolSettings,
   PageModel,
+  TextToolSettings,
   ThemeMode,
+  ToolSettings,
   ToolMode,
+  WhiteoutToolSettings,
   WorkingDocument,
 } from '../types/models'
 
 const THEME_KEY = 'chris-pdf-theme'
+
+const DEFAULT_HIGHLIGHT_SETTINGS: HighlightToolSettings = {
+  color: '#FFE066',
+  opacity: 0.45,
+  thickness: 1,
+}
+
+const DEFAULT_TEXT_SETTINGS: TextToolSettings = {
+  color: '#111827',
+  fontSize: 14,
+  bold: false,
+  defaultText: 'Text',
+}
+
+const DEFAULT_WHITEOUT_SETTINGS: WhiteoutToolSettings = {
+  fillColor: '#FFFFFF',
+  replacementColor: '#111827',
+  replacementFontSize: 14,
+  padding: 0,
+}
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value))
+}
+
+function expandRect(
+  rect: { x: number; y: number; width: number; height: number },
+  padding: number,
+): { x: number; y: number; width: number; height: number } {
+  const safePadding = Math.max(0, Math.min(0.1, padding))
+  const x = clamp01(rect.x - safePadding)
+  const y = clamp01(rect.y - safePadding)
+  const right = clamp01(rect.x + rect.width + safePadding)
+  const bottom = clamp01(rect.y + rect.height + safePadding)
+  return {
+    x,
+    y,
+    width: Math.max(0.002, right - x),
+    height: Math.max(0.002, bottom - y),
+  }
+}
 
 function emptyDocument(title = 'Untitled.pdf'): WorkingDocument {
   return {
@@ -154,10 +202,12 @@ type Store = {
   fitMode: FitMode
   organizerMode: boolean
   tool: ToolMode
+  toolSettings: ToolSettings
   theme: ThemeMode
   selectedAnnotationId: string | null
+  selectedTabIds: string[]
   statusMessage: string | null
-  rightPanelOpen: boolean
+  leftSidebarCollapsed: boolean
   recentFiles: string[]
 
   setStatusMessage: (message: string | null) => void
@@ -171,9 +221,12 @@ type Store = {
   zoomOut: () => void
   setFitMode: (mode: FitMode) => void
   setTool: (tool: ToolMode) => void
+  setHighlightToolSettings: (patch: Partial<HighlightToolSettings>) => void
+  setTextToolSettings: (patch: Partial<TextToolSettings>) => void
+  setWhiteoutToolSettings: (patch: Partial<WhiteoutToolSettings>) => void
   toggleTheme: () => void
   toggleOrganizerMode: () => void
-  toggleRightPanel: () => void
+  toggleLeftSidebar: () => void
   runSearch: (query: string) => Promise<void>
   gotoNextMatch: () => void
   gotoPreviousMatch: () => void
@@ -191,13 +244,17 @@ type Store = {
   deleteSelectedPages: () => Promise<void>
   insertBlankPage: (index: number) => Promise<void>
   mergePdf: (mode: 'append' | 'before' | 'after') => Promise<void>
+  mergeSelectedTabs: () => Promise<void>
   exportSelectedPages: () => Promise<void>
+  printDocument: () => Promise<void>
   save: () => Promise<void>
   saveAs: () => Promise<void>
   undo: () => void
   redo: () => void
   newTab: () => void
   switchTab: (id: string) => void
+  toggleTabSelection: (id: string) => void
+  clearTabSelection: () => void
   closeTab: (id: string) => void
 }
 
@@ -240,10 +297,16 @@ export const useEditorStore = create<Store>((set, get) => ({
   fitMode: 'custom',
   organizerMode: false,
   tool: 'select',
+  toolSettings: {
+    highlight: { ...DEFAULT_HIGHLIGHT_SETTINGS },
+    text: { ...DEFAULT_TEXT_SETTINGS },
+    whiteout: { ...DEFAULT_WHITEOUT_SETTINGS },
+  },
   theme: 'light',
   selectedAnnotationId: null,
+  selectedTabIds: [],
   statusMessage: null,
-  rightPanelOpen: true,
+  leftSidebarCollapsed: false,
   recentFiles: [],
 
   setStatusMessage: (message) => set({ statusMessage: message }),
@@ -267,17 +330,17 @@ export const useEditorStore = create<Store>((set, get) => ({
     }
   },
 
-  openPdf: async (newTab = false) => {
+  openPdf: async (newTab = true) => {
     const path = await pickOpenPdf()
     if (!path) return
     await get().openRecent(path, newTab)
   },
 
-  openRecent: async (path: string, newTab = false) => {
+  openRecent: async (path: string, newTab = true) => {
     const state = get()
     const idx = activeIndex(state.tabs, state.activeTabId)
     if (idx >= 0 && !newTab && state.tabs[idx].document.dirty) {
-      if (!window.confirm('Unsaved changes exist. Continue and discard them?')) return
+      if (!window.confirm('You have unsaved changes. Are you sure you want to close without saving?')) return
     }
     try {
       const doc = await loadDoc(path)
@@ -287,6 +350,8 @@ export const useEditorStore = create<Store>((set, get) => ({
           tabs: [...s.tabs, tabFromDoc(doc)],
           activeTabId: doc.id,
           currentPageIndex: 0,
+          selectedAnnotationId: null,
+          selectedTabIds: [],
           zoom: 1,
           fitMode: 'custom',
           statusMessage: `Opened ${doc.sourceFileName}`,
@@ -296,7 +361,15 @@ export const useEditorStore = create<Store>((set, get) => ({
         set((s) => {
           const tabs = [...s.tabs]
           tabs[idx] = { id: tabs[idx].id, title: doc.sourceFileName, document: doc }
-          return { tabs, currentPageIndex: 0, zoom: 1, fitMode: 'custom', statusMessage: `Opened ${doc.sourceFileName}` }
+          return {
+            tabs,
+            currentPageIndex: 0,
+            selectedAnnotationId: null,
+            selectedTabIds: [],
+            zoom: 1,
+            fitMode: 'custom',
+            statusMessage: `Opened ${doc.sourceFileName}`,
+          }
         })
       }
       await storeRecentFile(path)
@@ -398,9 +471,30 @@ export const useEditorStore = create<Store>((set, get) => ({
   zoomOut: () => set((state) => ({ zoom: Math.max(0.25, Number((state.zoom - 0.1).toFixed(2))), fitMode: 'custom' })),
   setFitMode: (mode) => set({ fitMode: mode }),
   setTool: (tool) => set({ tool }),
+  setHighlightToolSettings: (patch) =>
+    set((state) => ({
+      toolSettings: {
+        ...state.toolSettings,
+        highlight: { ...state.toolSettings.highlight, ...patch },
+      },
+    })),
+  setTextToolSettings: (patch) =>
+    set((state) => ({
+      toolSettings: {
+        ...state.toolSettings,
+        text: { ...state.toolSettings.text, ...patch },
+      },
+    })),
+  setWhiteoutToolSettings: (patch) =>
+    set((state) => ({
+      toolSettings: {
+        ...state.toolSettings,
+        whiteout: { ...state.toolSettings.whiteout, ...patch },
+      },
+    })),
   toggleTheme: () => set((state) => { const theme = state.theme === 'dark' ? 'light' : 'dark'; setTheme(theme); return { theme } }),
   toggleOrganizerMode: () => set((state) => ({ organizerMode: !state.organizerMode })),
-  toggleRightPanel: () => set((state) => ({ rightPanelOpen: !state.rightPanelOpen })),
+  toggleLeftSidebar: () => set((state) => ({ leftSidebarCollapsed: !state.leftSidebarCollapsed })),
 
   runSearch: async (query) => {
     const state = get()
@@ -448,12 +542,33 @@ export const useEditorStore = create<Store>((set, get) => ({
     if (idx === -1 || !rects.length) return
     const doc = state.tabs[idx].document
     if (!ensureEditable(set, doc)) return
+    const settings = state.toolSettings.highlight
+    const thickness = Math.max(0.3, Math.min(2.2, settings.thickness))
     const before = buildSnapshot(doc, state.currentPageIndex)
     const ann = cloneAnnots(doc.annotationsByPage)
     const now = Date.now()
     ann[pageId] = [
       ...(ann[pageId] ?? []),
-      ...rects.map((rect) => ({ id: crypto.randomUUID(), pageId, type: 'highlight' as const, rect, color: '#FFE066', opacity: 0.45, createdAt: now, updatedAt: now })),
+      ...rects.map((rect) => {
+        const centerY = rect.y + rect.height / 2
+        const adjustedHeight = clamp01(rect.height * thickness)
+        const adjustedY = clamp01(centerY - adjustedHeight / 2)
+        return {
+          id: crypto.randomUUID(),
+          pageId,
+          type: 'highlight' as const,
+          rect: {
+            x: clamp01(rect.x),
+            y: adjustedY,
+            width: clamp01(rect.width),
+            height: Math.max(0.002, adjustedHeight),
+          },
+          color: settings.color,
+          opacity: Math.max(0.1, Math.min(1, settings.opacity)),
+          createdAt: now,
+          updatedAt: now,
+        }
+      }),
     ]
     let nextDoc: WorkingDocument = { ...doc, annotationsByPage: ann }
     nextDoc = commit(nextDoc, 'Add highlight', before, buildSnapshot(nextDoc, state.currentPageIndex))
@@ -468,10 +583,22 @@ export const useEditorStore = create<Store>((set, get) => ({
     if (idx === -1) return
     const doc = state.tabs[idx].document
     if (!ensureEditable(set, doc)) return
+    const settings = state.toolSettings.text
     const before = buildSnapshot(doc, state.currentPageIndex)
     const ann = cloneAnnots(doc.annotationsByPage)
     const now = Date.now()
-    const entry: Annotation = { id: crypto.randomUUID(), pageId, type: 'textOverlay', rect, text: 'Text', color: '#111827', fontSize: 14, bold: false, createdAt: now, updatedAt: now }
+    const entry: Annotation = {
+      id: crypto.randomUUID(),
+      pageId,
+      type: 'textOverlay',
+      rect,
+      text: settings.defaultText || 'Text',
+      color: settings.color,
+      fontSize: Math.max(8, Math.min(96, settings.fontSize)),
+      bold: settings.bold,
+      createdAt: now,
+      updatedAt: now,
+    }
     ann[pageId] = [...(ann[pageId] ?? []), entry]
     let nextDoc: WorkingDocument = { ...doc, annotationsByPage: ann }
     nextDoc = commit(nextDoc, 'Add text overlay', before, buildSnapshot(nextDoc, state.currentPageIndex))
@@ -486,13 +613,34 @@ export const useEditorStore = create<Store>((set, get) => ({
     if (idx === -1) return
     const doc = state.tabs[idx].document
     if (!ensureEditable(set, doc)) return
+    const settings = state.toolSettings.whiteout
+    const paddedRect = expandRect(rect, settings.padding)
     const before = buildSnapshot(doc, state.currentPageIndex)
     const ann = cloneAnnots(doc.annotationsByPage)
     const now = Date.now()
     const next: Annotation[] = [...(ann[pageId] ?? [])]
-    next.push({ id: crypto.randomUUID(), pageId, type: 'whiteoutRect', rect, fill: '#FFFFFF', createdAt: now, updatedAt: now })
+    next.push({
+      id: crypto.randomUUID(),
+      pageId,
+      type: 'whiteoutRect',
+      rect: paddedRect,
+      fill: settings.fillColor,
+      createdAt: now,
+      updatedAt: now,
+    })
     if (replacement && replacement.trim()) {
-      next.push({ id: crypto.randomUUID(), pageId, type: 'replacementText', rect, text: replacement, color: '#111827', fontSize: 14, bold: false, createdAt: now, updatedAt: now })
+      next.push({
+        id: crypto.randomUUID(),
+        pageId,
+        type: 'replacementText',
+        rect: paddedRect,
+        text: replacement,
+        color: settings.replacementColor,
+        fontSize: Math.max(8, Math.min(96, settings.replacementFontSize)),
+        bold: false,
+        createdAt: now,
+        updatedAt: now,
+      })
     }
     ann[pageId] = next
     let nextDoc: WorkingDocument = { ...doc, annotationsByPage: ann }
@@ -725,6 +873,48 @@ export const useEditorStore = create<Store>((set, get) => ({
     }
   },
 
+  mergeSelectedTabs: async () => {
+    const state = get()
+    const selected = state.tabs.filter((tab) => state.selectedTabIds.includes(tab.id))
+    if (selected.length < 2) {
+      set({ statusMessage: 'Select at least two tabs to merge.' })
+      return
+    }
+    const nonMergeable = selected.find((tab) => tab.document.editingLocked || !tab.document.workingPdfBytes)
+    if (nonMergeable) {
+      set({
+        statusMessage:
+          'One or more selected tabs cannot be merged (view-only/encrypted or missing PDF bytes).',
+      })
+      return
+    }
+
+    try {
+      const mergedBytes = await mergePdfDocumentsInOrder(
+        selected.map((tab) => new Uint8Array(tab.document.workingPdfBytes!)),
+      )
+      const mergedTitle = `merged-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.pdf`
+      const doc: WorkingDocument = {
+        ...emptyDocument(mergedTitle),
+        id: crypto.randomUUID(),
+        sourceFileName: mergedTitle,
+        sourceBytes: new Uint8Array(mergedBytes),
+        workingPdfBytes: new Uint8Array(mergedBytes),
+      }
+      set((current) => ({
+        tabs: [...current.tabs, tabFromDoc(doc)],
+        activeTabId: doc.id,
+        currentPageIndex: 0,
+        selectedTabIds: [],
+        zoom: 1,
+        fitMode: 'custom',
+        statusMessage: `Merged ${selected.length} open tabs into ${mergedTitle}`,
+      }))
+    } catch (error) {
+      set({ statusMessage: logAndMessage('mergeSelectedTabs', error, 'Failed to merge selected tabs') })
+    }
+  },
+
   exportSelectedPages: async () => {
     const state = get()
     const idx = activeIndex(state.tabs, state.activeTabId)
@@ -742,6 +932,31 @@ export const useEditorStore = create<Store>((set, get) => ({
       set({ statusMessage: 'Selected pages exported' })
     } catch (e) {
       set({ statusMessage: logAndMessage('exportSelectedPages', e, 'Export failed') })
+    }
+  },
+
+  printDocument: async () => {
+    const state = get()
+    const idx = activeIndex(state.tabs, state.activeTabId)
+    if (idx === -1) return
+    const doc = state.tabs[idx].document
+    if (!doc.workingPdfBytes) return
+
+    try {
+      const bytes = doc.editingLocked
+        ? new Uint8Array(doc.workingPdfBytes)
+        : await flattenAnnotations(doc.workingPdfBytes, doc.workingPageModels, doc.annotationsByPage)
+      const tempPath = await createTempPdfPath('chris-print')
+      await safeWritePdf(tempPath, bytes, false)
+      // Reliable fallback across desktop environments: open the composed PDF in the system viewer for printing.
+      await openPathInDefaultApp(tempPath)
+      set({
+        statusMessage: doc.editingLocked
+          ? 'Opened view-only PDF in your default viewer for printing.'
+          : 'Opened printable PDF in your default viewer.',
+      })
+    } catch (error) {
+      set({ statusMessage: logAndMessage('printDocument', error, 'Print preparation failed') })
     }
   },
 
@@ -836,20 +1051,56 @@ export const useEditorStore = create<Store>((set, get) => ({
     set({ tabs, currentPageIndex: cmd.after.currentPageIndex, statusMessage: `Redo: ${cmd.label}` })
   },
 
-  newTab: () => { const doc = emptyDocument(); set((s) => ({ tabs: [...s.tabs, tabFromDoc(doc)], activeTabId: doc.id, currentPageIndex: 0, statusMessage: 'Created new tab' })) },
-  switchTab: (id) => { if (get().tabs.some((tab) => tab.id === id)) set({ activeTabId: id, currentPageIndex: 0, selectedAnnotationId: null }) },
+  newTab: () => {
+    const doc = emptyDocument()
+    set((s) => ({
+      tabs: [...s.tabs, tabFromDoc(doc)],
+      activeTabId: doc.id,
+      currentPageIndex: 0,
+      selectedAnnotationId: null,
+      statusMessage: 'Created new tab',
+    }))
+  },
+  switchTab: (id) => {
+    if (get().tabs.some((tab) => tab.id === id)) {
+      set({ activeTabId: id, currentPageIndex: 0, selectedAnnotationId: null })
+    }
+  },
+  toggleTabSelection: (id) =>
+    set((state) => ({
+      selectedTabIds: state.selectedTabIds.includes(id)
+        ? state.selectedTabIds.filter((tabId) => tabId !== id)
+        : [...state.selectedTabIds, id],
+    })),
+  clearTabSelection: () => set({ selectedTabIds: [] }),
   closeTab: (id) => {
     const state = get()
     const target = state.tabs.find((tab) => tab.id === id)
     if (!target) return
-    if (target.document.dirty && !window.confirm(`Tab ${target.title} has unsaved changes. Close anyway?`)) return
+    if (
+      target.document.dirty &&
+      !window.confirm('You have unsaved changes. Are you sure you want to close without saving?')
+    ) {
+      return
+    }
     const tabs = state.tabs.filter((tab) => tab.id !== id)
     if (!tabs.length) {
       const doc = emptyDocument()
-      set({ tabs: [tabFromDoc(doc)], activeTabId: doc.id, currentPageIndex: 0 })
+      set({
+        tabs: [tabFromDoc(doc)],
+        activeTabId: doc.id,
+        currentPageIndex: 0,
+        selectedAnnotationId: null,
+        selectedTabIds: [],
+      })
       return
     }
-    set({ tabs, activeTabId: state.activeTabId === id ? tabs[0].id : state.activeTabId })
+    set({
+      tabs,
+      activeTabId: state.activeTabId === id ? tabs[0].id : state.activeTabId,
+      selectedAnnotationId: state.activeTabId === id ? null : state.selectedAnnotationId,
+      selectedTabIds: state.selectedTabIds.filter((tabId) => tabId !== id),
+    })
   },
 }))
 

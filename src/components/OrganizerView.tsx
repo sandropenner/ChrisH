@@ -3,6 +3,7 @@ import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type D
 import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { Document, Page } from 'react-pdf'
 
+import { usePdfObjectUrl } from '../lib/pdf/usePdfObjectUrl'
 import { getActiveTab } from '../store/selectors'
 import { useEditorStore } from '../store/useEditorStore'
 import type { PageModel } from '../types/models'
@@ -35,11 +36,16 @@ function SortableThumb({ page, index }: { page: PageModel; index: number }) {
 export function OrganizerView() {
   const state = useEditorStore((s) => s)
   const active = getActiveTab(state)
+  const pdfObjectUrl = usePdfObjectUrl(active?.document.workingPdfBytes ?? null)
   const editingLocked = active?.document.editingLocked ?? false
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
 
   if (!active?.document.workingPdfBytes) {
     return <section className="organizer-empty">Open a PDF to use organizer mode.</section>
+  }
+
+  if (!pdfObjectUrl) {
+    return <section className="organizer-empty">Loading organizer...</section>
   }
 
   const pages = active.document.workingPageModels
@@ -82,7 +88,7 @@ export function OrganizerView() {
         </button>
       </div>
 
-      <Document file={{ data: active.document.workingPdfBytes }}>
+      <Document file={pdfObjectUrl}>
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={previewOrder} strategy={rectSortingStrategy}>
             <div className="organizer-grid">

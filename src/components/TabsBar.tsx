@@ -5,7 +5,10 @@ import { useEditorStore } from '../store/useEditorStore'
 export function TabsBar() {
   const tabs = useEditorStore((s) => s.tabs)
   const activeTabId = useEditorStore((s) => s.activeTabId)
+  const selectedTabIds = useEditorStore((s) => s.selectedTabIds)
   const switchTab = useEditorStore((s) => s.switchTab)
+  const toggleTabSelection = useEditorStore((s) => s.toggleTabSelection)
+  const clearTabSelection = useEditorStore((s) => s.clearTabSelection)
   const closeTab = useEditorStore((s) => s.closeTab)
   const newTab = useEditorStore((s) => s.newTab)
   const openPdf = useEditorStore((s) => s.openPdf)
@@ -17,9 +20,32 @@ export function TabsBar() {
           <button
             key={tab.id}
             className={`tab-chip ${activeTabId === tab.id ? 'active' : ''}`}
-            onClick={() => switchTab(tab.id)}
+            onClick={(event) => {
+              if (event.ctrlKey || event.metaKey) {
+                toggleTabSelection(tab.id)
+                return
+              }
+              switchTab(tab.id)
+            }}
             type="button"
           >
+            <span
+              className={`tab-select-dot ${selectedTabIds.includes(tab.id) ? 'selected' : ''}`}
+              title="Toggle tab selection for merge"
+              role="button"
+              tabIndex={0}
+              onClick={(event) => {
+                event.stopPropagation()
+                toggleTabSelection(tab.id)
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  toggleTabSelection(tab.id)
+                }
+              }}
+            />
             <span>{tab.title}</span>
             {tab.document.dirty ? <span className="dirty-dot" title="Unsaved changes" /> : null}
             <span
@@ -38,6 +64,11 @@ export function TabsBar() {
       </div>
 
       <div className="tabs-actions">
+        {selectedTabIds.length > 0 ? (
+          <button type="button" className="tool-btn" onClick={() => clearTabSelection()} title="Clear selected tabs">
+            Clear Tab Selection
+          </button>
+        ) : null}
         <button type="button" className="icon-btn" onClick={() => newTab()} title="New tab">
           <Plus size={16} />
         </button>

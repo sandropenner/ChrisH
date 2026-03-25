@@ -89,6 +89,19 @@ export async function mergePdfIntoWorking(
   }
 }
 
+export async function mergePdfDocumentsInOrder(pdfInputs: Uint8Array[]): Promise<Uint8Array> {
+  if (pdfInputs.length < 2) {
+    throw new Error('At least two PDFs are required to merge open tabs.')
+  }
+  const out = await PDFDocument.create()
+  for (const bytes of pdfInputs) {
+    const source = await PDFDocument.load(bytes)
+    const copied = await out.copyPages(source, source.getPageIndices())
+    copied.forEach((page) => out.addPage(page))
+  }
+  return out.save()
+}
+
 export async function exportSelectedPages(workingPdfBytes: Uint8Array, indices: number[]): Promise<Uint8Array> {
   const source = await PDFDocument.load(workingPdfBytes)
   const out = await PDFDocument.create()
@@ -138,12 +151,13 @@ export async function flattenAnnotations(
       }
 
       if (annotation.type === 'whiteoutRect') {
+        const color = hexToRgb(annotation.fill)
         page.drawRectangle({
           x,
           y: yBottom,
           width: rectWidth,
           height: rectHeight,
-          color: rgb(1, 1, 1),
+          color: rgb(color.r, color.g, color.b),
           borderWidth: 0,
         })
       }

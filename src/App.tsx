@@ -5,9 +5,7 @@ import 'react-pdf/dist/Page/TextLayer.css'
 import './lib/pdf/worker'
 
 import { DocumentViewer } from './components/DocumentViewer'
-import { InspectorPanel } from './components/InspectorPanel'
 import { OrganizerView } from './components/OrganizerView'
-import { SearchPanel } from './components/SearchPanel'
 import { StatusBar } from './components/StatusBar'
 import { TabsBar } from './components/TabsBar'
 import { ThumbnailSidebar } from './components/ThumbnailSidebar'
@@ -26,7 +24,7 @@ function App() {
   const zoomOut = useEditorStore((s) => s.zoomOut)
   const deleteSelectedPages = useEditorStore((s) => s.deleteSelectedPages)
   const organizerMode = useEditorStore((s) => s.organizerMode)
-  const rightPanelOpen = useEditorStore((s) => s.rightPanelOpen)
+  const leftSidebarCollapsed = useEditorStore((s) => s.leftSidebarCollapsed)
   const tabs = useEditorStore((s) => s.tabs)
 
   useEffect(() => {
@@ -46,7 +44,7 @@ function App() {
 
   useHotkeys('ctrl+o', (event) => {
     event.preventDefault()
-    openPdf(false)
+    openPdf(true)
   })
 
   useHotkeys('ctrl+s', (event) => {
@@ -98,15 +96,9 @@ function App() {
       <TabsBar />
       <Toolbar />
 
-      <div className="main-layout">
-        <ThumbnailSidebar />
+      <div className={`main-layout ${leftSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+        {!leftSidebarCollapsed ? <ThumbnailSidebar /> : null}
         <main className="center-pane">{organizerMode ? <OrganizerView /> : <DocumentViewer />}</main>
-        {rightPanelOpen ? (
-          <aside className="right-pane">
-            <SearchPanel />
-            <InspectorPanel />
-          </aside>
-        ) : null}
       </div>
 
       <StatusBar />

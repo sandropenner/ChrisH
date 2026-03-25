@@ -1,4 +1,4 @@
-use std::{fs, path::Path};
+use std::{fs, path::Path, process::Command};
 
 use rfd::FileDialog;
 use tauri::AppHandle;
@@ -67,4 +67,54 @@ pub fn list_recent_files(app: AppHandle) -> Result<Vec<String>, String> {
 #[tauri::command]
 pub fn store_recent_file(app: AppHandle, path: String) -> Result<(), String> {
     recent_files::store_recent_file(&app, path)
+}
+
+#[tauri::command]
+pub fn create_temp_pdf_path(prefix: Option<String>) -> Result<String, String> {
+    let safe_prefix = prefix
+        .unwrap_or_else(|| "chris-print".to_string())
+        .chars()
+        .map(|ch| if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' { ch } else { '-' })
+        .collect::<String>();
+    let filename = format!(
+        "{}-{}.pdf",
+        safe_prefix,
+        chrono::Utc::now().format("%Y%m%d-%H%M%S-%3f")
+    );
+    let path = std::env::temp_dir().join(filename);
+    Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn open_path_in_default_app(path: String) -> Result<(), String> {
+    let candidate = Path::new(&path);
+    if !candidate.exists() {
+        return Err("The print file could not be opened because it does not exist.".to_string());
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("cmd")
+            .args(["/C", "start", "", &path])
+            .spawn()
+            .map_err(|e| format!("Failed to launch default PDF viewer: {e}"))?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to launch default PDF viewer: {e}"))?;
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        Command::new("xdg-open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to launch default PDF viewer: {e}"))?;
+    }
+
+    Ok(())
 }

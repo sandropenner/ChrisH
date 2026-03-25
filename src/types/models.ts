@@ -79,6 +79,32 @@ export interface SearchState {
   activeMatchIndex: number
 }
 
+export interface HighlightToolSettings {
+  color: string
+  opacity: number
+  thickness: number
+}
+
+export interface TextToolSettings {
+  color: string
+  fontSize: number
+  bold: boolean
+  defaultText: string
+}
+
+export interface WhiteoutToolSettings {
+  fillColor: string
+  replacementColor: string
+  replacementFontSize: number
+  padding: number
+}
+
+export interface ToolSettings {
+  highlight: HighlightToolSettings
+  text: TextToolSettings
+  whiteout: WhiteoutToolSettings
+}
+
 export interface HistoryCommand {
   label: string
   before: EditorSnapshot

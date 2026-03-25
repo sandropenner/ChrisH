@@ -22,7 +22,9 @@ pub fn run() {
             commands::pick_save_pdf,
             commands::safe_write_pdf,
             commands::list_recent_files,
-            commands::store_recent_file
+            commands::store_recent_file,
+            commands::create_temp_pdf_path,
+            commands::open_path_in_default_app
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

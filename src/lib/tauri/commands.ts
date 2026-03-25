@@ -28,3 +28,11 @@ export async function listRecentFiles(): Promise<string[]> {
 export async function storeRecentFile(path: string): Promise<void> {
   await invoke('store_recent_file', { path })
 }
+
+export async function createTempPdfPath(prefix?: string): Promise<string> {
+  return invoke<string>('create_temp_pdf_path', { prefix: prefix ?? null })
+}
+
+export async function openPathInDefaultApp(path: string): Promise<void> {
+  await invoke('open_path_in_default_app', { path })
+}

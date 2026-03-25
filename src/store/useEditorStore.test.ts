@@ -8,6 +8,8 @@ vi.mock('../lib/tauri/commands', () => ({
   safeWritePdf: vi.fn(async () => undefined),
   listRecentFiles: vi.fn(async () => []),
   storeRecentFile: vi.fn(async () => undefined),
+  createTempPdfPath: vi.fn(async () => 'C:/temp/chris-print-test.pdf'),
+  openPathInDefaultApp: vi.fn(async () => undefined),
 }))
 
 import { createInitialPageModels } from '../lib/pdf/pageOps'

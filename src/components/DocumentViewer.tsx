@@ -88,6 +88,35 @@ export function DocumentViewer() {
     setDragStart(null)
   }
 
+  const applyHighlightFromSelection = () => {
+    if (state.tool !== 'highlight' || !pageId || !pageShellRef.current) return
+    const selection = window.getSelection()
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) return
+    const pageBounds = pageShellRef.current.getBoundingClientRect()
+    const range = selection.getRangeAt(0)
+    const rects = Array.from(range.getClientRects())
+      .map((rect) => {
+        const left = Math.max(rect.left, pageBounds.left)
+        const top = Math.max(rect.top, pageBounds.top)
+        const right = Math.min(rect.right, pageBounds.right)
+        const bottom = Math.min(rect.bottom, pageBounds.bottom)
+        return {
+          left,
+          top,
+          width: Math.max(0, right - left),
+          height: Math.max(0, bottom - top),
+        }
+      })
+      .filter((rect) => rect.width > 0 && rect.height > 0)
+    const normalized = rects
+      .map((rect) => toRectNorm(rect.left, rect.top, rect.width, rect.height))
+      .filter((rect) => rect.width > 0.001 && rect.height > 0.001)
+    if (normalized.length) {
+      state.addHighlights(pageId, normalized)
+    }
+    selection.removeAllRanges()
+  }
+
   const onOverlayMouseDown: React.MouseEventHandler<HTMLDivElement> = (event) => {
     if (state.tool !== 'whiteout') return
     if (!pageShellRef.current) return
@@ -108,15 +137,21 @@ export function DocumentViewer() {
     setDragRect({ x: left / box.width, y: top / box.height, width: width / box.width, height: height / box.height })
   }
 
-  const onOverlayMouseUp: React.MouseEventHandler<HTMLDivElement> = (event) => {
+  const onOverlayMouseUp: React.MouseEventHandler<HTMLDivElement> = () => {
     if (state.tool === 'whiteout') {
       finalizeWhiteout()
       return
     }
+  }
 
+  const onOverlayClick: React.MouseEventHandler<HTMLDivElement> = (event) => {
     if (!pageShellRef.current || !pageId) return
 
     if (state.tool === 'text') {
+      const target = event.target as HTMLElement
+      if (target.closest('.annot.text-overlay')) {
+        return
+      }
       const box = pageShellRef.current.getBoundingClientRect()
       const x = event.clientX
       const y = event.clientY
@@ -128,20 +163,6 @@ export function DocumentViewer() {
       }
       state.addTextOverlay(pageId, rect)
       return
-    }
-
-    if (state.tool === 'highlight') {
-      const selection = window.getSelection()
-      if (!selection || selection.isCollapsed || selection.rangeCount === 0) return
-      const range = selection.getRangeAt(0)
-      const rects = Array.from(range.getClientRects())
-      const normalized = rects
-        .map((rect) => toRectNorm(rect.left, rect.top, rect.width, rect.height))
-        .filter((rect) => rect.width > 0 && rect.height > 0)
-      if (normalized.length) {
-        state.addHighlights(pageId, normalized)
-      }
-      selection.removeAllRanges()
     }
   }
 
@@ -158,7 +179,7 @@ export function DocumentViewer() {
     }
 
     if (annotation.type === 'whiteoutRect') {
-      return <div key={annotation.id} className="annot whiteout" style={{ ...style }} />
+      return <div key={annotation.id} className="annot whiteout" style={{ ...style, background: annotation.fill }} />
     }
 
     if (annotation.type === 'textOverlay' || annotation.type === 'replacementText') {
@@ -167,8 +188,24 @@ export function DocumentViewer() {
           key={annotation.id}
           type="button"
           className={`annot text-overlay ${state.selectedAnnotationId === annotation.id ? 'selected' : ''}`}
-          style={{ ...style, color: annotation.color, fontWeight: annotation.bold ? 700 : 500, fontSize: `${annotation.fontSize}px` }}
-          onClick={() => state.selectAnnotation(annotation.id)}
+          style={{
+            ...style,
+            color: annotation.color,
+            fontWeight: annotation.bold ? 700 : 500,
+            fontSize: `${Math.max(8, annotation.fontSize * scale)}px`,
+            lineHeight: 1.2,
+            pointerEvents: state.tool === 'whiteout' ? 'none' : 'auto',
+          }}
+          onClick={(event) => {
+            event.stopPropagation()
+            state.selectAnnotation(annotation.id)
+          }}
+          onDoubleClick={(event) => {
+            event.stopPropagation()
+            const nextText = window.prompt('Edit text overlay:', annotation.text)
+            if (nextText === null) return
+            state.updateAnnotation(annotation.pageId, annotation.id, { text: nextText })
+          }}
         >
           {annotation.text}
         </button>
@@ -212,7 +249,7 @@ export function DocumentViewer() {
           state.setStatusMessage(getLoadErrorMessage(error))
         }}
       >
-        <div className="page-shell" ref={pageShellRef}>
+        <div className="page-shell" ref={pageShellRef} onMouseUpCapture={applyHighlightFromSelection}>
           <Page
             pageNumber={safePageNumber}
             scale={scale}
@@ -221,7 +258,13 @@ export function DocumentViewer() {
             renderTextLayer
           />
 
-          <div className="overlay-layer" onMouseDown={onOverlayMouseDown} onMouseMove={onOverlayMouseMove} onMouseUp={onOverlayMouseUp}>
+          <div
+            className={`overlay-layer ${state.tool === 'whiteout' || state.tool === 'text' ? 'capture' : 'passive'}`}
+            onMouseDown={onOverlayMouseDown}
+            onMouseMove={onOverlayMouseMove}
+            onMouseUp={onOverlayMouseUp}
+            onClick={onOverlayClick}
+          >
             {currentPageModel ? pageAnnotations.map(renderAnnotation) : null}
             {dragRect ? (
               <div
