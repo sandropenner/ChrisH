@@ -94,8 +94,6 @@ export interface TextToolSettings {
 
 export interface WhiteoutToolSettings {
   fillColor: string
-  replacementColor: string
-  replacementFontSize: number
   padding: number
 }
 

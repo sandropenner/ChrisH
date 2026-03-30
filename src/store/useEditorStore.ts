@@ -45,8 +45,6 @@ const DEFAULT_TEXT_SETTINGS: TextToolSettings = {
 
 const DEFAULT_WHITEOUT_SETTINGS: WhiteoutToolSettings = {
   fillColor: '#FFFFFF',
-  replacementColor: '#111827',
-  replacementFontSize: 14,
   padding: 0,
 }
 
@@ -191,7 +189,6 @@ type Store = {
   currentPageIndex: number
   zoom: number
   fitMode: FitMode
-  organizerMode: boolean
   tool: ToolMode
   toolSettings: ToolSettings
   theme: ThemeMode
@@ -219,14 +216,13 @@ type Store = {
   setTextToolSettings: (patch: Partial<TextToolSettings>) => void
   setWhiteoutToolSettings: (patch: Partial<WhiteoutToolSettings>) => void
   toggleTheme: () => void
-  toggleOrganizerMode: () => void
   toggleLeftSidebar: () => void
   runSearch: (query: string) => Promise<void>
   gotoNextMatch: () => void
   gotoPreviousMatch: () => void
   addHighlights: (pageId: string, rects: Array<{ x: number; y: number; width: number; height: number }>) => void
   addTextOverlay: (pageId: string, rect: { x: number; y: number; width: number; height: number }) => void
-  addWhiteout: (pageId: string, rect: { x: number; y: number; width: number; height: number }, replacement?: string) => void
+  addWhiteout: (pageId: string, rect: { x: number; y: number; width: number; height: number }) => void
   updateAnnotation: (pageId: string, annotationId: string, patch: Partial<Annotation>) => void
   removeAnnotation: (pageId: string, annotationId: string) => void
   selectAnnotation: (id: string | null) => void
@@ -310,7 +306,6 @@ export const useEditorStore = create<Store>((set, get) => {
   currentPageIndex: 0,
   zoom: 1,
   fitMode: 'custom',
-  organizerMode: false,
   tool: 'select',
   toolSettings: {
     highlight: { ...DEFAULT_HIGHLIGHT_SETTINGS },
@@ -515,7 +510,6 @@ export const useEditorStore = create<Store>((set, get) => {
       },
     })),
   toggleTheme: () => set((state) => { const theme = state.theme === 'dark' ? 'light' : 'dark'; setTheme(theme); return { theme } }),
-  toggleOrganizerMode: () => set((state) => ({ organizerMode: !state.organizerMode })),
   toggleLeftSidebar: () => set((state) => ({ leftSidebarCollapsed: !state.leftSidebarCollapsed })),
 
   runSearch: async (query) => {
@@ -629,7 +623,7 @@ export const useEditorStore = create<Store>((set, get) => {
     set({ tabs, toolPopover: null, selectedAnnotationId: entry.id, statusMessage: 'Text overlay added' })
   },
 
-  addWhiteout: (pageId, rect, replacement) => {
+  addWhiteout: (pageId, rect) => {
     const state = get()
     const idx = activeIndex(state.tabs, state.activeTabId)
     if (idx === -1) return
@@ -650,26 +644,12 @@ export const useEditorStore = create<Store>((set, get) => {
       createdAt: now,
       updatedAt: now,
     })
-    if (replacement && replacement.trim()) {
-      next.push({
-        id: crypto.randomUUID(),
-        pageId,
-        type: 'replacementText',
-        rect: paddedRect,
-        text: replacement,
-        color: settings.replacementColor,
-        fontSize: Math.max(8, Math.min(96, settings.replacementFontSize)),
-        bold: false,
-        createdAt: now,
-        updatedAt: now,
-      })
-    }
     ann[pageId] = next
     let nextDoc: WorkingDocument = { ...doc, annotationsByPage: ann }
     nextDoc = commit(nextDoc, 'Add whiteout', before, buildSnapshot(nextDoc, state.currentPageIndex))
     const tabs = [...state.tabs]
     tabs[idx] = { ...tabs[idx], document: nextDoc }
-    set({ tabs, toolPopover: null, statusMessage: 'Whiteout added (Cover & Replace)' })
+    set({ tabs, toolPopover: null, statusMessage: 'Whiteout added' })
   },
 
   updateAnnotation: (pageId, annotationId, patch) => {

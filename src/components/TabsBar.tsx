@@ -1,4 +1,4 @@
-import { FilePlus2, Plus, X } from 'lucide-react'
+import { FilePlus2, Lock, Plus, X } from 'lucide-react'
 
 import { useEditorStore } from '../store/useEditorStore'
 
@@ -19,7 +19,7 @@ export function TabsBar() {
         {tabs.map((tab) => (
           <button
             key={tab.id}
-            className={`tab-chip ${activeTabId === tab.id ? 'active' : ''}`}
+            className={`tab-chip ${activeTabId === tab.id ? 'active' : ''} ${tab.document.editingLocked ? 'view-only' : ''}`}
             onClick={(event) => {
               if (event.ctrlKey || event.metaKey) {
                 toggleTabSelection(tab.id)
@@ -28,6 +28,7 @@ export function TabsBar() {
               switchTab(tab.id)
             }}
             type="button"
+            title={tab.document.editingLocked ? 'View-only (encrypted/unsupported for edit)' : tab.title}
           >
             <span
               className={`tab-select-dot ${selectedTabIds.includes(tab.id) ? 'selected' : ''}`}
@@ -46,6 +47,7 @@ export function TabsBar() {
                 }
               }}
             />
+            {tab.document.editingLocked ? <Lock size={12} className="tab-lock" /> : null}
             <span>{tab.title}</span>
             {tab.document.dirty ? <span className="dirty-dot" title="Unsaved changes" /> : null}
             <span
@@ -54,8 +56,16 @@ export function TabsBar() {
                 event.stopPropagation()
                 closeTab(tab.id)
               }}
+              title="Close tab"
               role="button"
               tabIndex={0}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  closeTab(tab.id)
+                }
+              }}
             >
               <X size={14} />
             </span>

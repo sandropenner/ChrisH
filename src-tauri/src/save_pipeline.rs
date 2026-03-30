@@ -40,7 +40,8 @@ fn backup_file_path(target_path: &Path) -> PathBuf {
         .file_stem()
         .and_then(|v| v.to_str())
         .unwrap_or("document");
-    let backup_name = format!("{stem}.bak.{}.pdf", timestamp());
+    // Keep a rolling backup to avoid noisy backup-file growth on repeated saves.
+    let backup_name = format!("{stem}.bak.pdf");
     target_path.with_file_name(backup_name)
 }
 
@@ -139,7 +140,7 @@ mod tests {
                 .file_name()
                 .to_string_lossy()
                 .to_string();
-            if file_name.contains(".bak.") {
+            if file_name.ends_with(".bak.pdf") {
                 backup_found = true;
             }
         }
@@ -151,5 +152,24 @@ mod tests {
             .read_to_end(&mut out)
             .expect("read");
         assert!(out.starts_with(b"%PDF-"));
+    }
+
+    #[test]
+    fn reuses_single_rolling_backup_file() {
+        let tmp_dir = tempfile::tempdir().expect("temp dir");
+        let output = tmp_dir.path().join("existing.pdf");
+        fs::write(&output, sample_pdf_bytes()).expect("seed file");
+
+        safe_write_pdf(&output, &sample_pdf_bytes(), true).expect("first save");
+        safe_write_pdf(&output, &sample_pdf_bytes(), true).expect("second save");
+
+        let backup_count = fs::read_dir(tmp_dir.path())
+            .expect("read dir")
+            .filter_map(Result::ok)
+            .map(|entry| entry.file_name().to_string_lossy().to_string())
+            .filter(|name| name.ends_with(".bak.pdf"))
+            .count();
+
+        assert_eq!(backup_count, 1);
     }
 }

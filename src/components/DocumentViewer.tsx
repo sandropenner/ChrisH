@@ -48,8 +48,12 @@ export function DocumentViewer() {
   const [drawMode, setDrawMode] = useState<DrawMode>(null)
   const [drawStart, setDrawStart] = useState<{ x: number; y: number } | null>(null)
   const [draftRect, setDraftRect] = useState<RectNorm | null>(null)
+  const draftRectRef = useRef<RectNorm | null>(null)
   const [textTransform, setTextTransform] = useState<TextTransform | null>(null)
   const [textPreviewRect, setTextPreviewRect] = useState<RectNorm | null>(null)
+  const [spacePressed, setSpacePressed] = useState(false)
+  const [isPanning, setIsPanning] = useState(false)
+  const panStartRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null)
 
   useEffect(() => {
     const container = viewerRef.current
@@ -60,6 +64,57 @@ export function DocumentViewer() {
     observer.observe(container)
     return () => observer.disconnect()
   }, [])
+
+  useEffect(() => {
+    draftRectRef.current = draftRect
+  }, [draftRect])
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.code !== 'Space') return
+      const target = event.target as HTMLElement | null
+      if (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable) return
+      event.preventDefault()
+      setSpacePressed(true)
+    }
+
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.code !== 'Space') return
+      setSpacePressed(false)
+      setIsPanning(false)
+      panStartRef.current = null
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isPanning || !viewerRef.current || !panStartRef.current) return
+
+    const onMouseMove = (event: MouseEvent) => {
+      const start = panStartRef.current
+      if (!start || !viewerRef.current) return
+      viewerRef.current.scrollLeft = start.left - (event.clientX - start.x)
+      viewerRef.current.scrollTop = start.top - (event.clientY - start.y)
+    }
+
+    const onMouseUp = () => {
+      setIsPanning(false)
+      panStartRef.current = null
+    }
+
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp, { once: true })
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+    }
+  }, [isPanning])
 
   const currentPageModel = active?.document.workingPageModels[state.currentPageIndex]
   const pageId = currentPageModel?.pageId
@@ -76,6 +131,8 @@ export function DocumentViewer() {
     const heightScale = Math.max(0.2, (containerSize.height - padding) / pageSize.height)
     return Math.min(widthScale, heightScale)
   }, [state.fitMode, state.zoom, containerSize, pageSize])
+
+  const canPan = state.fitMode === 'custom' && state.zoom > 1.01
 
   const currentMatch = useMemo(() => {
     if (!active) return null
@@ -219,11 +276,13 @@ export function DocumentViewer() {
 
   const onOverlayMouseDown: React.MouseEventHandler<HTMLDivElement> = (event) => {
     if (!pageId || !pageShellRef.current) return
+    if (event.button !== 0) return
     const target = event.target as HTMLElement
     if (state.tool === 'text' || state.tool === 'whiteout') {
       if (target.closest('.annot.text-overlay')) return
       const start = pointToNorm(event.clientX, event.clientY)
       if (!start) return
+      event.preventDefault()
       state.closeToolPopover()
       setDrawMode(state.tool === 'text' ? 'text' : 'whiteout')
       setDrawStart(start)
@@ -231,39 +290,39 @@ export function DocumentViewer() {
     }
   }
 
-  const onOverlayMouseMove: React.MouseEventHandler<HTMLDivElement> = (event) => {
-    if (!drawMode || !drawStart) return
-    const current = pointToNorm(event.clientX, event.clientY)
-    if (!current) return
-    setDraftRect(rectFromPoints(drawStart, current))
-  }
+  useEffect(() => {
+    if (!drawMode || !drawStart || !pageId) return
 
-  const onOverlayMouseUp: React.MouseEventHandler<HTMLDivElement> = () => {
-    if (!drawMode || !pageId || !draftRect) {
+    const onMouseMove = (event: MouseEvent) => {
+      const current = pointToNorm(event.clientX, event.clientY)
+      if (!current) return
+      setDraftRect(rectFromPoints(drawStart, current))
+    }
+
+    const onMouseUp = (event: MouseEvent) => {
+      const end = pointToNorm(event.clientX, event.clientY)
+      const finalRect = end ? rectFromPoints(drawStart, end) : draftRectRef.current
+
+      if (finalRect && finalRect.width > 0.01 && finalRect.height > 0.01) {
+        if (drawMode === 'text') {
+          state.addTextOverlay(pageId, finalRect)
+        } else {
+          state.addWhiteout(pageId, finalRect)
+        }
+      }
+
       setDrawMode(null)
       setDrawStart(null)
       setDraftRect(null)
-      return
     }
 
-    const validRect = draftRect.width > 0.01 && draftRect.height > 0.01
-    if (!validRect) {
-      setDrawMode(null)
-      setDrawStart(null)
-      setDraftRect(null)
-      return
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp, { once: true })
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
     }
-
-    if (drawMode === 'text') {
-      state.addTextOverlay(pageId, draftRect)
-    } else {
-      const replacement = window.prompt('Replacement text (optional):', '') ?? ''
-      state.addWhiteout(pageId, draftRect, replacement)
-    }
-    setDrawMode(null)
-    setDrawStart(null)
-    setDraftRect(null)
-  }
+  }, [drawMode, drawStart, pageId, state])
 
   const renderAnnotation = (annotation: Annotation) => {
     const previewRect =
@@ -321,6 +380,29 @@ export function DocumentViewer() {
     return null
   }
 
+  const onViewerWheel: React.WheelEventHandler<HTMLElement> = (event) => {
+    if (!event.ctrlKey) return
+    event.preventDefault()
+    if (event.deltaY < 0) {
+      state.zoomIn()
+    } else {
+      state.zoomOut()
+    }
+  }
+
+  const onViewerMouseDown: React.MouseEventHandler<HTMLElement> = (event) => {
+    if (event.button !== 0) return
+    if (!canPan || !spacePressed || !viewerRef.current) return
+    event.preventDefault()
+    panStartRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+      left: viewerRef.current.scrollLeft,
+      top: viewerRef.current.scrollTop,
+    }
+    setIsPanning(true)
+  }
+
   if (!active?.document.workingPdfBytes) {
     return (
       <section className="viewer empty" ref={viewerRef}>
@@ -340,7 +422,12 @@ export function DocumentViewer() {
   const safePageNumber = currentPageModel ? state.currentPageIndex + 1 : 1
 
   return (
-    <section className="viewer" ref={viewerRef}>
+    <section
+      className={`viewer ${canPan && spacePressed ? 'pan-ready' : ''} ${isPanning ? 'panning' : ''}`}
+      ref={viewerRef}
+      onWheel={onViewerWheel}
+      onMouseDown={onViewerMouseDown}
+    >
       <Document
         file={pdfObjectUrl}
         loading={<p className="muted">Loading PDF...</p>}
@@ -367,8 +454,6 @@ export function DocumentViewer() {
           <div
             className={`overlay-layer ${state.tool === 'whiteout' || state.tool === 'text' ? 'capture crosshair' : 'passive'}`}
             onMouseDown={onOverlayMouseDown}
-            onMouseMove={onOverlayMouseMove}
-            onMouseUp={onOverlayMouseUp}
           >
             {currentPageModel ? pageAnnotations.map(renderAnnotation) : null}
             {draftRect ? (
