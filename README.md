@@ -97,7 +97,7 @@ Implemented commands:
 - Opening/viewing is PDF.js-first. The app opens from raw bytes and lets PDF.js load/render first.
 - Edit/save/export/merge/page-output operations use pdf-lib.
 - If PDF.js can render a file but pdf-lib cannot open it (for example encryption/password restrictions), the app keeps the file open in **view-only** mode and disables editing/saving actions.
-- The status bar and toolbar show a clear view-only message instead of a generic open failure.
+- The toolbar and transient status toast show a clear view-only message instead of a generic open failure.
 - On successful save/save-as, overlay annotations are flattened into the output PDF and then cleared from editable overlay state to avoid duplicate re-application on later saves.
 
 ## Keyboard shortcuts

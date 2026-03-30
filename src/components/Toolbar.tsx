@@ -17,6 +17,7 @@ import {
   Save,
   Search,
   Sun,
+  Trash2,
   Type,
   Undo2,
   ZoomIn,
@@ -51,17 +52,13 @@ export function Toolbar() {
     const onMouseDown = (event: MouseEvent) => {
       const target = event.target as Node
       if (popoverRef.current?.contains(target)) return
-      const shouldResetTool = TOOL_POPOVERS.includes(state.toolPopover as ToolMode) && state.tool !== 'select'
-      if (shouldResetTool) {
-        state.setTool('select')
-      }
+      // Outside click closes the popover but keeps the active tool selected.
       state.closeToolPopover()
     }
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
-      const shouldResetTool = TOOL_POPOVERS.includes(state.toolPopover as ToolMode) && state.tool !== 'select'
-      if (shouldResetTool) {
+      if (TOOL_POPOVERS.includes(state.toolPopover as ToolMode) && state.tool !== 'select') {
         state.setTool('select')
       }
       state.closeToolPopover()
@@ -93,49 +90,59 @@ export function Toolbar() {
   return (
     <header className="toolbar">
       <div className="tool-group">
-        <button type="button" className="tool-btn" onClick={() => state.openPdf(true)}>
-          <FolderOpen size={16} /> Open
+        <button type="button" className="icon-btn" title="Open (Ctrl+O)" onClick={() => state.openPdf(true)}>
+          <FolderOpen size={16} />
         </button>
-        <button type="button" className="tool-btn" onClick={() => state.save()} disabled={!canSave}>
-          <Save size={16} /> Save
-        </button>
-        <button type="button" className="tool-btn" onClick={() => state.saveAs()} disabled={!canSave}>
-          <FileDown size={16} /> Save As
+        <button type="button" className="icon-btn" title="Save (Ctrl+S)" onClick={() => state.save()} disabled={!canSave}>
+          <Save size={16} />
         </button>
         <button
           type="button"
-          className="tool-btn"
+          className="icon-btn"
+          title="Save As (Ctrl+Shift+S)"
+          onClick={() => state.saveAs()}
+          disabled={!canSave}
+        >
+          <FileDown size={16} />
+        </button>
+        <button
+          type="button"
+          className="icon-btn"
+          title="Print"
           onClick={() => state.printDocument()}
           disabled={!active?.document.workingPdfBytes}
         >
-          <Printer size={16} /> Print
+          <Printer size={16} />
         </button>
       </div>
 
       <div className="tool-group">
         <button
           type="button"
-          className={`tool-btn ${state.tool === 'highlight' ? 'active' : ''}`}
+          className={`icon-btn ${state.tool === 'highlight' ? 'active' : ''}`}
+          title="Highlight"
           onClick={() => toggleTool('highlight')}
           disabled={editingLocked}
         >
-          <Highlighter size={16} /> Highlight
+          <Highlighter size={16} />
         </button>
         <button
           type="button"
-          className={`tool-btn ${state.tool === 'text' ? 'active' : ''}`}
+          className={`icon-btn ${state.tool === 'text' ? 'active' : ''}`}
+          title="Add Text"
           onClick={() => toggleTool('text')}
           disabled={editingLocked}
         >
-          <Type size={16} /> Add Text
+          <Type size={16} />
         </button>
         <button
           type="button"
-          className={`tool-btn ${state.tool === 'whiteout' ? 'active' : ''}`}
+          className={`icon-btn ${state.tool === 'whiteout' ? 'active' : ''}`}
+          title="Whiteout / Cover & Replace"
           onClick={() => toggleTool('whiteout')}
           disabled={editingLocked}
         >
-          <Eraser size={16} /> Whiteout / Cover & Replace
+          <Eraser size={16} />
         </button>
       </div>
 
@@ -158,28 +165,46 @@ export function Toolbar() {
         >
           <RotateCw size={16} />
         </button>
-        <button type="button" className="tool-btn" onClick={() => state.deleteSelectedPages()} disabled={editingLocked}>
-          <Circle size={16} /> Delete Selected {selectedPageCount ? `(${selectedPageCount})` : ''}
+        <button
+          type="button"
+          className="icon-btn"
+          title={`Delete selected pages${selectedPageCount ? ` (${selectedPageCount})` : ''}`}
+          onClick={() => state.deleteSelectedPages()}
+          disabled={editingLocked}
+        >
+          <Trash2 size={16} />
         </button>
-        <button type="button" className="tool-btn" onClick={() => state.mergeSelectedTabs()}>
+        <button type="button" className="tool-btn compact-label" onClick={() => state.mergeSelectedTabs()}>
           Merge Open Tabs
         </button>
-        <button type="button" className="tool-btn" onClick={() => state.mergePdf('append')} disabled={editingLocked}>
-          <FileInput size={16} /> Import PDF
+        <button
+          type="button"
+          className="icon-btn"
+          title="Import PDF"
+          onClick={() => state.mergePdf('append')}
+          disabled={editingLocked}
+        >
+          <FileInput size={16} />
         </button>
-        <button type="button" className="tool-btn" onClick={() => state.exportSelectedPages()} disabled={editingLocked}>
-          <FileOutput size={16} /> Export Selected
+        <button
+          type="button"
+          className="icon-btn"
+          title="Export selected pages"
+          onClick={() => state.exportSelectedPages()}
+          disabled={editingLocked}
+        >
+          <FileOutput size={16} />
         </button>
       </div>
 
       <div className="tool-group">
-        <button type="button" className="tool-btn" onClick={() => state.setFitMode('width')}>
+        <button type="button" className="tool-btn compact-label" onClick={() => state.setFitMode('width')}>
           Fit Width
         </button>
-        <button type="button" className="tool-btn" onClick={() => state.setFitMode('page')}>
+        <button type="button" className="tool-btn compact-label" onClick={() => state.setFitMode('page')}>
           Fit Page
         </button>
-        <button type="button" className="tool-btn" onClick={() => state.setFitMode('custom')}>
+        <button type="button" className="icon-btn" title="Actual size" onClick={() => state.setFitMode('custom')}>
           100%
         </button>
       </div>
@@ -211,12 +236,8 @@ export function Toolbar() {
         <button type="button" className="icon-btn" title="Toggle thumbnails" onClick={() => state.toggleLeftSidebar()}>
           {state.leftSidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
         </button>
-        <button
-          type="button"
-          className={`tool-btn ${state.organizerMode ? 'active' : ''}`}
-          onClick={() => state.toggleOrganizerMode()}
-        >
-          Organizer
+        <button type="button" className={`icon-btn ${state.organizerMode ? 'active' : ''}`} title="Organizer mode" onClick={() => state.toggleOrganizerMode()}>
+          <Circle size={16} />
         </button>
         {editingLocked ? <span className="muted">View-only</span> : null}
         <button type="button" className="icon-btn" title="Theme" onClick={() => state.toggleTheme()}>

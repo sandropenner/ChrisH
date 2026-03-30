@@ -37,7 +37,7 @@ textarea {
 
 .app-shell {
   display: grid;
-  grid-template-rows: auto auto auto 1fr auto;
+  grid-template-rows: auto auto 1fr;
   height: 100%;
 }
 
@@ -119,13 +119,13 @@ html.dark .tab-chip {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   position: relative;
-  padding: 8px 10px;
+  padding: 6px 8px;
   border-bottom: 1px solid rgb(148 163 184 / 0.35);
   background: rgb(255 255 255 / 0.8);
   backdrop-filter: blur(6px);
-  overflow-x: auto;
+  overflow-x: hidden;
   overflow-y: visible;
   white-space: nowrap;
 }
@@ -137,8 +137,8 @@ html.dark .toolbar {
 .tool-group {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding-right: 6px;
+  gap: 4px;
+  padding-right: 4px;
   border-right: 1px solid rgb(148 163 184 / 0.25);
   flex: 0 0 auto;
 }
@@ -152,18 +152,19 @@ html.dark .toolbar {
 .icon-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   border: 1px solid rgb(148 163 184 / 0.35);
   border-radius: 8px;
   background: rgb(255 255 255 / 0.75);
   color: inherit;
-  padding: 6px 9px;
+  padding: 5px 8px;
   cursor: pointer;
   flex: 0 0 auto;
+  line-height: 1;
 }
 
 .icon-btn {
-  padding: 6px;
+  padding: 5px;
 }
 
 .tool-btn.active {
@@ -178,6 +179,11 @@ html.dark .toolbar {
 
 .tool-btn.danger {
   border-color: rgb(239 68 68 / 0.5);
+}
+
+.tool-btn.compact-label {
+  font-size: 12px;
+  padding: 5px 7px;
 }
 
 html.dark .tool-btn,
@@ -224,6 +230,7 @@ html.dark .icon-btn {
   padding: 8px;
   cursor: pointer;
   width: 100%;
+  overflow: visible;
 }
 
 .thumb-list {
@@ -231,27 +238,34 @@ html.dark .icon-btn {
   gap: 10px;
 }
 
+.thumb-item .react-pdf__Page {
+  position: relative;
+  z-index: 1;
+}
+
 .thumb-select-dot {
   position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 14px;
-  height: 14px;
+  top: 8px;
+  right: 8px;
+  width: 16px;
+  height: 16px;
   border-radius: 999px;
-  border: 1px solid rgb(71 85 105 / 0.9);
+  border: 2px solid rgb(15 23 42 / 0.8);
   background: rgb(248 250 252 / 0.95);
-  z-index: 3;
-  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.75);
+  z-index: 12;
+  box-shadow: 0 0 0 2px rgb(255 255 255 / 0.9);
+  pointer-events: auto;
 }
 
 .thumb-select-dot.selected {
-  background: #facc15;
-  border-color: #ca8a04;
+  background: #facc15 !important;
+  border-color: #a16207 !important;
+  box-shadow: 0 0 0 2px rgb(255 255 255 / 0.95), 0 0 0 4px rgb(250 204 21 / 0.45);
 }
 
 html.dark .thumb-select-dot {
-  border-color: rgb(148 163 184 / 0.95);
-  background: rgb(15 23 42 / 0.9);
+  border-color: rgb(248 250 252 / 0.95);
+  background: rgb(2 6 23 / 0.95);
 }
 
 html.dark .thumb-item {
@@ -505,18 +519,23 @@ html.dark .org-item {
   height: 100%;
 }
 
-.status-bar {
-  display: flex;
-  gap: 14px;
-  align-items: center;
-  border-top: 1px solid rgb(148 163 184 / 0.3);
-  background: rgb(255 255 255 / 0.8);
+.status-toast {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 40;
+  max-width: min(420px, calc(100vw - 24px));
   padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgb(14 165 233 / 0.35);
+  background: rgb(255 255 255 / 0.9);
+  box-shadow: 0 10px 28px rgb(15 23 42 / 0.2);
   font-size: 12px;
 }
 
-html.dark .status-bar {
-  background: rgb(15 23 42 / 0.8);
+html.dark .status-toast {
+  background: rgb(15 23 42 / 0.95);
+  border-color: rgb(56 189 248 / 0.55);
 }
 
 @media (max-width: 1200px) {

@@ -1,4 +1,7 @@
 import { useEffect } from 'react'
+import { isTauri } from '@tauri-apps/api/core'
+import { getCurrentWindow } from '@tauri-apps/api/window'
+import { confirm } from '@tauri-apps/plugin-dialog'
 import { useHotkeys } from 'react-hotkeys-hook'
 
 import 'react-pdf/dist/Page/TextLayer.css'
@@ -6,7 +9,6 @@ import './lib/pdf/worker'
 
 import { DocumentViewer } from './components/DocumentViewer'
 import { OrganizerView } from './components/OrganizerView'
-import { StatusBar } from './components/StatusBar'
 import { TabsBar } from './components/TabsBar'
 import { ThumbnailSidebar } from './components/ThumbnailSidebar'
 import { Toolbar } from './components/Toolbar'
@@ -26,12 +28,14 @@ function App() {
   const organizerMode = useEditorStore((s) => s.organizerMode)
   const leftSidebarCollapsed = useEditorStore((s) => s.leftSidebarCollapsed)
   const tabs = useEditorStore((s) => s.tabs)
+  const statusMessage = useEditorStore((s) => s.statusMessage)
 
   useEffect(() => {
     initialize()
   }, [initialize])
 
   useEffect(() => {
+    if (isTauri()) return
     const handler = (event: BeforeUnloadEvent) => {
       if (tabs.some((tab) => tab.document.dirty)) {
         event.preventDefault()
@@ -41,6 +45,39 @@ function App() {
     window.addEventListener('beforeunload', handler)
     return () => window.removeEventListener('beforeunload', handler)
   }, [tabs])
+
+  useEffect(() => {
+    if (!isTauri()) return
+    let unlisten: (() => void) | null = null
+
+    const setupClosePrompt = async () => {
+      try {
+        unlisten = await getCurrentWindow().onCloseRequested(async (event) => {
+          const hasDirtyTabs = useEditorStore.getState().tabs.some((tab) => tab.document.dirty)
+          if (!hasDirtyTabs) return
+          const confirmed = await confirm('You have unsaved changes. Are you sure you want to close without saving?', {
+            title: 'Unsaved Changes',
+            kind: 'warning',
+            okLabel: 'Close Without Saving',
+            cancelLabel: 'Cancel',
+          })
+          if (!confirmed) {
+            event.preventDefault()
+          }
+        })
+      } catch (error) {
+        console.error('[App:onCloseRequested]', error)
+      }
+    }
+
+    void setupClosePrompt()
+
+    return () => {
+      if (unlisten) {
+        unlisten()
+      }
+    }
+  }, [])
 
   useHotkeys('ctrl+o', (event) => {
     event.preventDefault()
@@ -100,8 +137,7 @@ function App() {
         {!leftSidebarCollapsed ? <ThumbnailSidebar /> : null}
         <main className="center-pane">{organizerMode ? <OrganizerView /> : <DocumentViewer />}</main>
       </div>
-
-      <StatusBar />
+      {statusMessage ? <div className="status-toast">{statusMessage}</div> : null}
     </div>
   )
 }
